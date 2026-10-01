@@ -1,0 +1,8 @@
+asset_class,weight_per_square_lbs,weight_per_sqft_lbs,typical_service_life_years,source_reference
+3-Tab Asphalt Shingles,175.0,1.75,17.5,Asphalt Roofing Manufacturers Assoc. (ARMA) / GAF Specs
+Architectural Asphalt Shingles,250.0,2.5,27.5,Owens Corning / CertainTeed Technical Data Sheets
+Impact-Resistant (Class 4) Shingles,290.0,2.9,30.0,Insurance Institute for Business & Home Safety (IBHS)
+Metal Roofing,110.0,1.1,55.0,Metal Roofing Alliance (MRA)
+Clay Tile,800.0,8.0,75.0,Tile Roofing Industry Alliance (TRIA)
+Concrete Tile,900.0,9.0,45.0,Tile Roofing Industry Alliance (TRIA)
+Slate Roofing,1150.0,11.5,112.5,National Slate Association (NSA)

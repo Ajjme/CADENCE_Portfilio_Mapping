@@ -1,0 +1,15 @@
+Roofing Material Type,Closest WARM/Hub Proxy,Landfilling EF (MT CO2e/short ton),Recycling/Processing EF (MT CO2e/short ton),Notes,Landfilling EF (kg CO2e/lb),Recycling/Processing EF (kg CO2e/lb)
+Asphalt Shingles (3-tab/architectural),Asphalt Shingles,0.02,0.03,,0.01,0.015
+Built-up Roofing (BUR) / Modified Bitumen,Asphalt Concrete,0.02,0.0035205384954666,,0.01,0.0017602692477333
+Clay Tile,Clay Bricks,0.02,NA — not published in Table 9,No recycling factor available; no Combusted EF fallback exists in Table 9. No dedicated clay roofing tile category in WARM; proxied to Clay Bricks as nearest ceramic mineral proxy.,0.01,
+Concrete Tile,Concrete,0.02,0.01,,0.01,0.005
+Slate,Concrete,0.02,0.01,No dedicated slate/stone category in WARM; proxied to Concrete as nearest inert mineral C&D material.,0.01,0.005
+Steel Roofing (standing seam/corrugated/metal shingle),Structural Steel,0.02,0.04,,0.01,0.02
+Aluminum Roofing/Flashing,Aluminum Ingot,0.02,0.04,,0.01,0.02
+Copper Roofing/Flashing,Copper Wire,0.02,0.18,WARM has no sheet-copper category; Copper Wire is the only copper proxy available.,0.01,0.09
+Wood Shakes/Shingles,Dimensional Lumber,0.17,NA — not published in Table 9,No recycling factor available; consider Combusted EF of 0.05 as fallback. No dedicated wood roofing shakes category in WARM; proxied to Dimensional Lumber.,0.085,
+TPO Membrane,PP (Polypropylene),NA — not published in Table 9,NA — not published in Table 9,Proxy 'PP (Polypropylene)' was not matched in Table 9; verify EPA naming drift. No landfilling factor available; no Combusted EF fallback exists in Table 9. No recycling factor available; no Combusted EF fallback exists in Table 9. No dedicated TPO line item in Table 9; PP (Polypropylene) is the closest thermoplastic proxy.,,
+EPDM Rubber Membrane,Tires,0.02,0.1,No dedicated EPDM line item in Table 9; Tires is the closest rubber proxy.,0.01,0.05
+PVC Single-ply Membrane,PVC,0.02,NA — not published in Table 9,No recycling factor available; consider Combusted EF of 1.26 as fallback. No dedicated PVC roofing membrane category in WARM; proxied to PVC material line.,0.01,
+Fiberglass Shingle Mat/Insulation,Fiberglass Insulation,0.02,0.05,,0.01,0.025
+Gypsum Roof Cover Board,Drywall,0.02,NA — not published in Table 9,No recycling factor available; no Combusted EF fallback exists in Table 9. No dedicated roof cover board line in WARM; proxied to Drywall as the closest gypsum product.,0.01,
