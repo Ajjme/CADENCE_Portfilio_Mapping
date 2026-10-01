@@ -47,7 +47,7 @@ def load_terrain_averaged_curve(
         WITH terrain AS (
             SELECT curve_id
             FROM read_parquet('{attributes_path}')
-            WHERE key = 'terrain_id' AND CAST(value AS INTEGER) = {terrain_id}
+            WHERE key = 'terrain_id' AND TRY_CAST(value AS INTEGER) = {terrain_id}
         )
         SELECT
             p.x AS wind_speed_mph,
