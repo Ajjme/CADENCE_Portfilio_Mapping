@@ -25,6 +25,14 @@ The implemented annual costing pipeline is documented in `docs/economics.md`. Be
 - Real cash-flow discount-rate selection, NPV, BCR, payback, and avoided-loss calculations. The existing SC-CO2 rate only selects a published carbon-value series.
 - Decision rules, ranked investment plans, and portfolio summaries.
 - Integration with the sequential stock-flow engine after the burnout-versus-voluntary-upgrade precedence decision is resolved.
+- Add configurable, empirically calibrated roof depreciation curves (including any residual-value floor) to replace the Market Study's straight-line remaining-value assumption.
+- Calibrate portfolio adoption beyond the deterministic trigger policy using owner budgets, financing, incentives, replacement deferral, and representative market weights before labeling roof-share scenarios as market predictions.
+
+## Insurance
+
+- Extend beyond the V1 `Standard` flat-dollar deductible and `wind` peril to approved deductible types (including percent-of-insured-value), covered perils and multi-peril policies, with explicit input mappings and contracts.
+- Model event-level wind claim frequency and severity so deductibles and limits are applied per covered occurrence before annual expected payouts are calculated. The current annual-loss proxy is not an actuarial claims forecast.
+- Add policy-level shared limits/deductibles, premium repricing after roof replacement, insurer expenses, reinsurance, and risk margins only after their coverage and allocation rules are defined.
 
 ## Ingestion And Operations
 

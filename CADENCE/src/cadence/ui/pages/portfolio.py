@@ -1,5 +1,7 @@
 """Asset Portfolio page."""
 
+from __future__ import annotations
+
 import hashlib
 import json
 import uuid
@@ -9,6 +11,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from cadence.economics.contracts import CostStream, EconomicsRunConfig
 from cadence.ui.components import render_asset_map, render_summary_card
 from cadence.ui.paths import DEFAULT_WORKBOOK, ECONOMICS_CONFIG, UI_WORK_ROOT
 from cadence.ui.pipeline import load_economics_config, run_portfolio_analysis
@@ -56,9 +59,29 @@ def render() -> None:
         st.markdown(section_header("Filter Assets"), unsafe_allow_html=True)
         filtered = _filter_assets(assets, source_checksum)
         st.caption(f"Showing {len(filtered):,} of {len(assets):,} assets")
+        st.markdown(section_header("Analysis costs"), unsafe_allow_html=True)
+        default_config = load_economics_config()
+        settings = _analysis_settings(default_config)
+        if settings["start_year"] > settings["end_year"]:
+            st.session_state.pop("run_state", None)
+            st.warning("End year must be no earlier than start year.")
+            return
+        enabled = {CostStream.MATERIAL, CostStream.LABOR}
+        for stream, label in ((CostStream.DISPOSAL, "Disposal"), (CostStream.CARBON, "Carbon")):
+            if st.toggle(label, value=stream in default_config.enabled_cost_streams, key=f"cost-{stream.value}"):
+                enabled.add(stream)
+        st.toggle("Loss of use", value=False, disabled=True,
+                  help="Requires verified annual loss-of-use costs for every asset and roof material.")
+        try:
+            config = _configured_run(default_config, settings, enabled)
+        except ValueError as error:
+            st.session_state.pop("run_state", None)
+            st.error(f"Invalid analysis settings: {error}")
+            return
 
     selected_ids = filtered["asset_id"].astype(str).tolist()
-    identity = analysis_identity(source_checksum, selected_ids)
+    base_identity = analysis_identity(source_checksum, selected_ids)
+    identity = _effective_identity(base_identity, config, settings)
     update_analysis_identity(st.session_state, identity)
     st.session_state["selected_asset_ids"] = selected_ids
 
@@ -81,11 +104,48 @@ def render() -> None:
             )
 
     st.divider()
-    _render_run_panel(source_path, source_checksum, selected_ids, identity)
+    _render_run_panel(source_path, source_checksum, selected_ids, identity, config)
+
+
+def _analysis_settings(config: EconomicsRunConfig) -> dict:
+    start_year = st.number_input("Start year", min_value=2026, max_value=2050,
+                                 value=config.start_year, step=1, key="analysis-start-year")
+    end_year = st.number_input("End year", min_value=2026, max_value=2050,
+                               value=config.end_year, step=1, key="analysis-end-year")
+    rate = st.number_input("Annual real discount rate (%)", min_value=0.0,
+                           value=config.real_discount_rate * 100, step=0.25,
+                           format="%.2f", key="analysis-real-rate")
+    carbon_rates = (1.5, 2.0, 2.5)
+    carbon_rate = st.selectbox("Social cost of carbon rate (%)", carbon_rates,
+                                index=carbon_rates.index(config.scghg_discount_rate), key="analysis-carbon-rate")
+    demand_surge = st.segmented_control("Demand surge?", ("No", "Yes"),
+                                         default="Yes" if config.demand_surge else "No", key="analysis-demand-surge")
+    return {"start_year": int(start_year), "end_year": int(end_year),
+            "real_discount_rate": float(rate) / 100, "scghg_discount_rate": float(carbon_rate),
+            "demand_surge": demand_surge == "Yes"}
+
+
+def _configured_run(config: EconomicsRunConfig, settings: dict,
+                    enabled: set[CostStream] | None = None) -> EconomicsRunConfig:
+    values = {**config.model_dump(mode="json"), **settings}
+    if enabled is not None:
+        values["enabled_cost_streams"] = sorted(stream.value for stream in enabled)
+    return EconomicsRunConfig.model_validate(values)
+
+
+def _effective_identity(identity: str, config: EconomicsRunConfig, settings: dict) -> str:
+    payload = json.dumps({"portfolio_identity": identity, "config": config.model_dump(mode="json"),
+                          "settings": settings}, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _portfolio_source() -> tuple[Path, str, str]:
     st.markdown("#### Upload Asset Registry")
+    st.download_button(
+        "Download example asset workbook", data=DEFAULT_WORKBOOK.read_bytes(),
+        file_name=DEFAULT_WORKBOOK.name,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
     upload = st.file_uploader(
         "Upload the complete CADENCE Excel asset workbook",
         type=["xlsx"],
@@ -191,10 +251,10 @@ def _render_run_panel(
     source_checksum: str,
     selected_ids: list[str],
     identity: str,
+    config: EconomicsRunConfig,
 ) -> None:
     st.markdown(section_header("Run CADENCE Alternative Analysis"), unsafe_allow_html=True)
-    config = load_economics_config()
-    with st.expander("Fixed economics configuration and provenance"):
+    with st.expander("Economics configuration and provenance"):
         st.code(str(ECONOMICS_CONFIG), language=None)
         st.json(
             {
@@ -226,7 +286,7 @@ def _render_run_panel(
                 stage_line.markdown(f"**{stage.title()}** · {message}")
 
             try:
-                run_state = run_portfolio_analysis(derived, run_root, progress)
+                run_state = run_portfolio_analysis(derived, run_root, progress, config=config)
             except Exception as error:
                 status.update(label="CADENCE analysis failed", state="error")
                 st.error(str(error))

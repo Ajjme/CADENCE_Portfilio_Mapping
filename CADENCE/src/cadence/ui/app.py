@@ -3,7 +3,7 @@
 import streamlit as st
 
 from cadence.economics.temporary_policies import TEMPORARY_TILE_POLICY_ID
-from cadence.ui.pages import portfolio, results
+from cadence.ui.pages import insurance, portfolio, results
 from cadence.ui.theme import APP_CSS
 
 st.set_page_config(layout="wide", page_title="CADENCE Portfolio Analysis")
@@ -26,6 +26,12 @@ navigation = st.navigation(
             title="Alternative Analysis Results",
             icon=":material/analytics:",
             url_path="results",
+        ),
+        st.Page(
+            insurance.render,
+            title="Insurance View",
+            icon=":material/shield:",
+            url_path="insurance",
         ),
     ]
 )

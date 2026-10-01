@@ -70,7 +70,7 @@ class AssetEconomicsInput(BaseModel):
 
 
 class EconomicsRunConfig(BaseModel):
-    """Locked first-phase economic assumptions for one reproducible run."""
+    """Validated economic assumptions for one reproducible run."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -86,11 +86,12 @@ class EconomicsRunConfig(BaseModel):
     scghg_discount_rate: float = Field(default=2.0)
     real_discount_rate: float = Field(default=0.02, ge=0.0)
     operational_value_tolerance_percent: float = Field(default=20.0, ge=0.0)
+    demand_surge: bool = False
 
     @model_validator(mode="after")
     def validate_locked_configuration(self) -> "EconomicsRunConfig":
-        if self.start_year != START_YEAR or self.end_year != END_YEAR:
-            raise ValueError("economics horizon must be 2026 through 2050")
+        if not START_YEAR <= self.start_year <= self.end_year <= END_YEAR:
+            raise ValueError("economics horizon must be within 2026 through 2050")
         override_classes = set(self.installed_cost_overrides)
         expected_classes = set(OFFICIAL_MATERIAL_CLASSES)
         if override_classes != expected_classes:

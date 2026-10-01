@@ -29,7 +29,7 @@ def _config() -> dict:
     }
 
 
-def test_accepts_locked_economics_config() -> None:
+def test_accepts_default_economics_config() -> None:
     config = EconomicsRunConfig.model_validate(_config())
 
     assert config.start_year == 2026
@@ -37,11 +37,23 @@ def test_accepts_locked_economics_config() -> None:
     assert config.installed_cost_overrides["OFFICIAL_TILE"].installed_usd_per_sqft == 15.0
 
 
+def test_accepts_later_start_and_shorter_horizon() -> None:
+    config = EconomicsRunConfig.model_validate(
+        {**_config(), "start_year": 2030, "end_year": 2040,
+         "real_discount_rate": 0.035, "scghg_discount_rate": 2.5}
+    )
+
+    assert (config.start_year, config.end_year) == (2030, 2040)
+    assert config.real_discount_rate == 0.035
+    assert config.scghg_discount_rate == 2.5
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
         ("start_year", 2025),
         ("end_year", 2051),
+        ("real_discount_rate", -0.01),
         ("scghg_discount_rate", 3.0),
         ("enabled_cost_streams", ["material", "unknown"]),
     ],
@@ -52,6 +64,13 @@ def test_rejects_invalid_run_configuration(field: str, value: object) -> None:
 
     with pytest.raises(ValidationError):
         EconomicsRunConfig.model_validate(values)
+
+
+def test_rejects_reversed_horizon() -> None:
+    with pytest.raises(ValidationError, match="economics horizon"):
+        EconomicsRunConfig.model_validate(
+            {**_config(), "start_year": 2040, "end_year": 2030}
+        )
 
 
 def test_requires_all_three_installed_cost_overrides() -> None:

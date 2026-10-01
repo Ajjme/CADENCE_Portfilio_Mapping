@@ -6,22 +6,36 @@ CADENCE is a modular roofing-resilience platform. Its implemented pipelines curr
 
 ## Streamlit Application
 
-The production user interface is a native two-page Streamlit application over the existing CADENCE pipelines. Install the UI, geography, and test dependencies from this directory:
+See the [Streamlit Dashboard Guide](docs/streamlit.md) for the page-by-page workflow, analysis controls, result maps, saved artifacts, supporting code, and draft-feature limitations.
+
+The user interface is a native three-page Streamlit application over the existing CADENCE pipelines: **Asset Portfolio**, **Alternative Analysis Results**, and **Insurance View**. See [docs/insurance.md](docs/insurance.md) for the insurance analysis model and outputs. Install the UI, geography, and test dependencies from this directory:
 
 ```shell
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[ui,geo,test]'
 ```
 
-Launch the application:
+Launch the combined application from this directory:
 
 ```shell
-.venv/bin/python -m streamlit run src/cadence/ui/app.py
+bash run_dashboard.sh
 ```
+
+The canonical local URL is **http://localhost:8520/**. From the repository root, use `bash CADENCE/run_dashboard.sh`; the script selects the correct working directory and virtual environment. The local Streamlit configuration also pins direct launches to port 8520. Reuse this single server across chats. If the port is occupied, open the running dashboard instead of choosing another port. To load changes to imported Python modules reliably, stop the server with Ctrl+C and run the same command again, then refresh the browser. Restarting clears in-memory sessions, not saved immutable analysis results; select a saved run explicitly or rerun the portfolio to restore an active workflow.
 
 The **Asset Portfolio** page loads `Data/User_Inputs/asset_inventory_test_1.xlsx` by default or accepts a complete `.xlsx` workbook. Its filters control both the displayed assets and the analyzed subset. Running an analysis creates a session-specific filtered workbook without modifying the source, then directly invokes the existing economics-asset, Year 1 damage, and Alternative Analysis Python entry points.
 
-The **Alternative Analysis Results** page reads the returned immutable run ID and `v0.4.0` Parquet/JSON artifacts. It currently includes Overview, all eight Time Series metrics, Alternative Summary, and Run Information. Lifecycle State, Damage & Vulnerability, and Economics Detail are reserved for the second UI stage. Existing runs can be opened only by explicit run-ID selection; the app never guesses the newest directory.
+The Portfolio's Analysis Settings control the run's start and end years (within 2026–2050), annual real discount rate (2% by default), and social-cost-of-carbon rate (1.5%, 2.0%, or 2.5%; 2.0% by default). The annual real rate discounts cash flows; the carbon rate selects a published valuation series. Roof ages in the asset workbook are interpreted as ages at the selected start year, while costs remain in real 2026 USD. Defaults come from `Data/User_Inputs/economics_config_test_1.json`; changes affect only the selected run, are recorded in its metadata, and do not rewrite either the config or the global-input workbook.
+
+The **Alternative Analysis Results** page reads the returned immutable run ID and `v0.4.0` Parquet/JSON artifacts. It includes Overview, Time Series, Alternative Summary, Cost Allocations, Wind Return Period, and Run Information. Lifecycle State, Damage & Vulnerability, and Economics Detail are reserved for the second UI stage. Existing runs can be opened only by explicit run-ID selection; the app never guesses the newest directory.
+
+**Replacement Opportunities** in the portfolio Overview provides separate avoided-damage and NPV maps, each with its own best-replacement or material selection. Asset points and ZIP/ZCTA, county, and state summaries read the selected immutable run's saved outcomes and geography, so maps also work after restarting Streamlit. Regional totals and averages remain unavailable when any selected value is missing; negative outcomes remain visible. No model calculations are rerun when map controls change.
+
+**Insurance View** is available in the same sidebar. Running Alternative Analysis also publishes a separate insurance run linked to the physical run and selected workbook's policy snapshot. Existing insurance runs are selected explicitly. Physical-only older runs remain readable; rerun the matching workbook to add insurance without modifying those physical artifacts.
+
+**Market Study remains an unfinished draft**, preserved in the economics modules and tests and not part of the supported dashboard workflow. The current results renderer still exposes its draft tab; see the [review limitations](docs/streamlit.md#market-study-draft) before using it. Completing the event-driven stock simulation, vectorized production execution, material-specific removal costs, and publication/UI integration is deferred. The opening page's disposal/carbon switches remain available for Alternative Analysis; material and labor remain required, and loss of use remains disabled until validated annual inputs are connected.
+
+**Cost Allocations** compares the installed-roof baseline with new Asphalt, Metal, and Tile for a selected year (2026 by default), either for one asset or the full portfolio. Stacked bars separate effective installation material and labor allocations, expected repairs, enabled loss of use, and installation-event disposal and carbon costs in real 2026 USD. Installation costs occur only when a roof is installed or replaced. Material/labor shares come from the run's immutable economics reference; configured override shares are used for installed-cost fallbacks, while temporary Tile inherits Metal shares applied to Tile's effective installed cost. These shares are allocations, not separate observed bills. Missing enabled costs leave affected totals unavailable rather than silently contributing zero. Runs without their linked economics reference cannot show this tab's breakdown.
 
 Streamlit is an orchestration and visualization layer. Scientific, vulnerability, lifecycle, climate, and economics calculations remain in their existing CADENCE modules.
 

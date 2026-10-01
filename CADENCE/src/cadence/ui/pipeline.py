@@ -11,6 +11,7 @@ import polars as pl
 
 from cadence.economics.alternative_pipeline import run_alternative_analysis_pipeline
 from cadence.economics.contracts import EconomicsRunConfig
+from cadence.insurance.pipeline import publish_insurance
 from cadence.reference_data.economics_assets import build_economics_asset_features
 from cadence.reference_data.year1_damage import build_asset_scoped_damage
 from cadence.ui.paths import (
@@ -23,6 +24,7 @@ from cadence.ui.paths import (
     RESULTS_ROOT,
     WIND_RETURN_PERIODS,
 )
+from cadence.ui.workbooks import sha256_file, validate_portfolio
 
 ProgressCallback = Callable[[str, str], None]
 
@@ -36,6 +38,7 @@ def run_portfolio_analysis(
     workbook_path: Path,
     work_root: Path,
     progress: ProgressCallback | None = None,
+    config: EconomicsRunConfig | None = None,
 ) -> dict[str, Any]:
     """Run the existing ingestion, damage, and alternative-analysis pipelines."""
     notify = progress or (lambda _stage, _message: None)
@@ -60,7 +63,7 @@ def run_portfolio_analysis(
     notify("alternatives", "Running lifecycle alternative analysis")
     run_manifest = run_alternative_analysis_pipeline(
         pl.read_parquet(_manifest_path(asset_manifest, "output_path")),
-        load_economics_config(),
+        config if config is not None else load_economics_config(),
         pl.read_parquet(_manifest_path(damage_manifest, "asset_results_path")),
         CADENCE_ROOT,
         FRAGILITY_ROOT,
@@ -68,12 +71,21 @@ def run_portfolio_analysis(
         climate_delta_path=CLIMATE_DELTA,
     )
     verified = verify_run_manifest(run_manifest)
+    notify("insurance", "Calculating run-linked wind-roof insurance results")
+    insurance_run = publish_insurance(
+        Path(verified["run_root"]),
+        verified["run_metadata"],
+        validate_portfolio(workbook_path).source,
+        sha256_file(workbook_path),
+        RESULTS_ROOT / "roof_insurance_analysis",
+    )
     return {
         "workbook_path": str(workbook_path.resolve()),
         "economics_ready_asset_path": asset_manifest["output_path"],
         "asset_damage_result_path": damage_manifest["asset_results_path"],
         "asset_manifest": asset_manifest,
         "damage_manifest": damage_manifest,
+        "insurance_run": insurance_run,
         **verified,
     }
 

@@ -1,0 +1,9 @@
+[server]
+address = "127.0.0.1"
+port = 8520
+headless = true
+runOnSave = true
+
+[browser]
+serverAddress = "localhost"
+serverPort = 8520

@@ -52,12 +52,56 @@ def build_annual_labor_costs(
         pl.col("AREA").alias("labor_market_id"),
         pl.col("OCC_CODE").alias("occupation_code"),
         pl.col("PROJECTION_YEAR").alias("year"),
-        pl.col("H_MEDIAN_CONSTRAINED_PROJECTED_WAGE").alias("hourly_wage_usd"),
+        pl.col("H_MEDIAN_CONSTRAINED_PROJECTED_WAGE").alias("median_hourly_wage_usd"),
         pl.col("MODEL_VERSION").alias("labor_projection_version"),
     )
+    if config.demand_surge:
+        base_wages = (
+            pl.read_parquet(wage_base_path.with_name("labor_wages_wide.parquet"))
+            .filter(pl.col("DATA_YEAR") == 2025)
+            .select(
+                pl.col("AREA").alias("labor_market_id"),
+                pl.col("OCC_CODE").alias("occupation_code"),
+                pl.col("H_MEDIAN").alias("base_median_wage"),
+                pl.col("H_PCT90").alias("base_p90_wage"),
+            )
+        )
+        wages = wages.join(
+            base_wages,
+            on=["labor_market_id", "occupation_code"],
+            how="left",
+            validate="m:1",
+        )
+        invalid = wages.join(
+            asset_productivity.select("labor_market_id", "occupation_code").unique(),
+            on=["labor_market_id", "occupation_code"],
+            how="semi",
+        ).filter(
+            ~pl.col("base_median_wage").is_finite().fill_null(False)
+            | (pl.col("base_median_wage") <= 0)
+            | ~pl.col("base_p90_wage").is_finite().fill_null(False)
+            | (pl.col("base_p90_wage") <= 0)
+            | ~pl.col("median_hourly_wage_usd").is_finite().fill_null(False)
+            | (pl.col("median_hourly_wage_usd") <= 0)
+        )
+        if invalid.height:
+            markets = invalid["labor_market_id"].drop_nulls().unique().sort().to_list()
+            raise ValueError(
+                "demand surge wages are missing or nonpositive for labor_market_id values: "
+                + ", ".join(markets)
+            )
+        wages = wages.with_columns(
+            (
+                pl.col("base_p90_wage")
+                * pl.col("median_hourly_wage_usd")
+                / pl.col("base_median_wage")
+            ).alias("hourly_wage_usd")
+        ).drop("base_median_wage", "base_p90_wage")
+    else:
+        wages = wages.with_columns(pl.col("median_hourly_wage_usd").alias("hourly_wage_usd"))
     base_provenance = (
         pl.read_parquet(wage_base_path)
-        .filter(pl.col("WAGE_METRIC") == "H_MEDIAN")
+        .filter(pl.col("WAGE_METRIC") == ("H_PCT90" if config.demand_surge else "H_MEDIAN"))
         .select(
             pl.col("AREA").alias("labor_market_id"),
             pl.col("OCC_CODE").alias("occupation_code"),
@@ -98,11 +142,21 @@ def build_annual_labor_costs(
                 * pl.col("hourly_wage_usd")
                 / pl.col("roof_area_sqft")
             ).alias("startup_labor_usd_per_sqft"),
+            (
+                pl.col("base_person_hours_per_sqft") * pl.col("median_hourly_wage_usd")
+            ).alias("median_variable_labor_usd_per_sqft"),
+            (
+                pl.col("startup_person_hours")
+                * pl.col("median_hourly_wage_usd")
+                / pl.col("roof_area_sqft")
+            ).alias("median_startup_labor_usd_per_sqft"),
         )
         .group_by("asset_id", "year", "official_material_id")
         .agg(
             pl.col("variable_labor_usd_per_sqft").sum(),
             pl.col("startup_labor_usd_per_sqft").sum(),
+            pl.col("median_variable_labor_usd_per_sqft").sum(),
+            pl.col("median_startup_labor_usd_per_sqft").sum(),
             pl.col("hourly_wage_usd").mul(pl.col("occupation_labor_share")).sum().alias(
                 "weighted_hourly_wage_usd"
             ),
@@ -120,16 +174,25 @@ def build_annual_labor_costs(
             (
                 pl.col("variable_labor_usd_per_sqft")
                 + pl.col("startup_labor_usd_per_sqft")
-            ).alias("source_labor_usd_per_sqft")
+            ).alias("source_labor_usd_per_sqft"),
+            (
+                pl.col("median_variable_labor_usd_per_sqft")
+                + pl.col("median_startup_labor_usd_per_sqft")
+            ).alias("median_labor_usd_per_sqft"),
         )
         .with_columns(
             (
-                pl.col("source_labor_usd_per_sqft")
-                / pl.col("source_labor_usd_per_sqft")
+                pl.col("median_labor_usd_per_sqft")
+                / pl.col("median_labor_usd_per_sqft")
                 .filter(pl.col("year") == 2026)
                 .first()
                 .over(["asset_id", "official_material_id"])
             ).alias("labor_growth_factor")
+        )
+        .drop(
+            "median_variable_labor_usd_per_sqft",
+            "median_startup_labor_usd_per_sqft",
+            "median_labor_usd_per_sqft",
         )
         .sort(["asset_id", "year", "official_material_id"])
     )

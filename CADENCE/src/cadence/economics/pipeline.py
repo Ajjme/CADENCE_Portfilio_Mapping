@@ -65,6 +65,8 @@ def run_economics_pipeline(
     )
     annual_growth = labor.select(
         "asset_id", "year", "official_material_id", "labor_growth_factor"
+    ).filter(
+        pl.col("year").is_between(config.start_year, config.end_year)
     ).join(
         material_growth.select(
             "official_material_id", "year", "material_growth_factor"
@@ -195,6 +197,7 @@ def _source_paths(repository_root: Path) -> Dict[str, Path]:
         "labor_productivity": repository_root / "Data" / "Labor" / "Productivity" / "roof_labor_productivity_parameters.csv",
         "labor_projection": repository_root / "Data" / "Labor" / "Escalation" / "labor_wage_projections_2026_2050.parquet",
         "labor_base": repository_root / "Data" / "Labor" / "Start_Year_2026" / "labor_wages_long.parquet",
+        "labor_base_wide": repository_root / "Data" / "Labor" / "Start_Year_2026" / "labor_wages_wide.parquet",
         "disposal": repository_root / "Data" / "Disposal" / "EREF_2024_Tipping_Fees_Parsed.csv",
         "carbon": repository_root / "Data" / "Carbon" / "roofing_eol_emission_factors.csv",
         "scghg": repository_root / "Data" / "Carbon" / "table_a5_1_scghg_unrounded_2020_2080.csv",

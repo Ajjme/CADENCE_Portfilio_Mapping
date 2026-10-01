@@ -4,16 +4,18 @@
 
 This guide explains the complete roof Alternative Analysis workflow, how to run it from VS Code, what the pipeline produces, and how to interpret the economic and risk results.
 
+For the interactive portfolio, result maps, analysis controls, and Insurance View, see the [Streamlit Dashboard Guide](docs/streamlit.md).
+
 ## What The Analysis Answers
 
-For every asset and every year from 2026 through 2050, CADENCE compares four independent roof lifecycle scenarios:
+For every asset and every year in the selected horizon, CADENCE compares four independent roof lifecycle scenarios. The default is 2026 through 2050; a run may select a shorter inclusive horizon within those years.
 
 | Scenario ID | Meaning |
 |---|---|
 | `BASELINE_CURRENT` | Keep the roof that is installed today at its current age; replace it in kind when it reaches end of useful life. |
-| `NEW_ASPHALT` | Remove the current roof and install a new Asphalt roof at the start of 2026. |
-| `NEW_METAL` | Remove the current roof and install a new Metal roof at the start of 2026. |
-| `NEW_TILE` | Remove the current roof and install a new Tile roof at the start of 2026. |
+| `NEW_ASPHALT` | Remove the current roof and install a new Asphalt roof at the selected start year. |
+| `NEW_METAL` | Remove the current roof and install a new Metal roof at the selected start year. |
+| `NEW_TILE` | Remove the current roof and install a new Tile roof at the selected start year. |
 
 The same-material alternative is retained. For example, an existing five-year-old Asphalt roof is compared with a new Asphalt roof as well as new Metal and Tile roofs.
 
@@ -44,7 +46,7 @@ The analysis uses a sequential annual lifecycle model. Within each year:
 7. Convert expected damage into repair and lifecycle costs.
 8. Carry roof age and state into the next year.
 
-All alternatives are installed at the start of 2026. Every scenario replaces its active roof in kind if it later burns out during the study period.
+All alternatives are installed at the selected start year. Workbook roof ages describe the installed roof at that start year; they are not automatically advanced from 2026. Every scenario replaces its active roof in kind if it later burns out during the study period. Dollar values retain a real-2026 basis.
 
 ### Useful Life
 
@@ -162,10 +164,10 @@ $$
 NPV is:
 
 $$
-NPV_s=\sum_{y=2026}^{2050}\frac{CF_{baseline,y}-CF_{alternative,s,y}}{(1+r)^{y-2026}}
+NPV_s=\sum_{y=y_{start}}^{y_{end}}\frac{CF_{baseline,y}-CF_{alternative,s,y}}{(1+r)^{y-y_{start}}}
 $$
 
-where $r$ is `real_discount_rate`. The default is `0.02`, or 2%.
+where $r$ is `real_discount_rate`, and $y_{start}$ and $y_{end}$ are the selected run years. The default rate is `0.02`, or 2%, and the default horizon is 2026-2050.
 
 Interpretation:
 

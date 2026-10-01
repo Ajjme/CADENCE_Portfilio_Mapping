@@ -2,7 +2,7 @@
 
 ## Purpose And Scope
 
-The CADENCE economics module produces annual roof-option cost records for every asset, year from 2026 through 2050, and official V1 material class:
+The base CADENCE economics pipeline produces annual roof-option cost records for every asset, year in the selected horizon within 2026 through 2050, and official V1 material class:
 
 - `OFFICIAL_ASPHALT`
 - `OFFICIAL_METAL`
@@ -17,7 +17,9 @@ The module currently answers four questions:
 3. What disposal, landfill-carbon, and expected loss-of-use costs are associated with the option?
 4. Given an annual expected damage ratio, what is the provisional repair estimate?
 
-It does not yet calculate NPV, BCR, payback, incentives, insurance effects, adoption decisions, burnout replacement, or year-to-year roof-state transitions.
+This base cost pipeline does not calculate NPV, BCR, payback, incentives, insurance effects, adoption decisions, or year-to-year roof-state transitions. The separate [Alternative Analysis pipeline](../ALTERNATIVE_ANALYSIS_README.md) already calculates lifecycle state, burnout replacement, avoided damage, net benefit, and NPV. The [insurance overlay](insurance.md) calculates annual wind-roof payouts and underwriting indicators from those physical results.
+
+See the [Streamlit Dashboard Guide](streamlit.md) for the portfolio controls, cost-allocation charts, opportunity maps, and supporting code. [Market Study](streamlit.md#market-study-draft) is unfinished draft work and must not be confused with the supported four-scenario lifecycle comparison.
 
 ## Package Layout
 
@@ -116,15 +118,17 @@ The `--config` argument is a JSON document validated by `EconomicsRunConfig`.
 
 | Field | Required | Contract |
 |---|---|---|
-| `start_year` | No | Must be `2026`; default `2026` |
-| `end_year` | No | Must be `2050`; default `2050` |
+| `start_year` | No | Between `2026` and `2050`, no later than `end_year`; default `2026` |
+| `end_year` | No | Between `start_year` and `2050`; default `2050` |
 | `enabled_cost_streams` | No | Subset of `material`, `labor`, `disposal`, `carbon`, `loss_of_use`; defaults to material and labor |
 | `installed_cost_overrides` | Yes | Exactly one Asphalt, Metal, and Tile override |
 | `default_roof_shape` | Yes | Nonblank labor lookup default |
 | `default_roof_deck_attachment` | Yes | Nonblank labor lookup default |
 | `default_roof_wall_connection` | Yes | Nonblank labor lookup default |
 | `scghg_discount_rate` | No | `1.5`, `2.0`, or `2.5`; default `2.0` |
+| `real_discount_rate` | No | Nonnegative annual real cash-flow discount rate as a decimal; default `0.02` (2%) |
 | `operational_value_tolerance_percent` | No | Nonnegative source-versus-override percentage; default `20.0` |
+| `demand_surge` | No | Boolean, default `false`; selects P90-scaled source installation wages for all analysis years |
 
 Each installed override has:
 
@@ -203,7 +207,7 @@ The productivity table is keyed by candidate subtype, roof shape, deck attachmen
 The module uses:
 
 - all occupation rows in the productivity model;
-- `H_MEDIAN_CONSTRAINED_PROJECTED_WAGE` for 2026 through 2050;
+- `H_MEDIAN_CONSTRAINED_PROJECTED_WAGE` for 2026 through 2050 when demand surge is No (the default);
 - the asset's exact precomputed BLS `labor_market_id`;
 - fixed productivity through time; and
 - startup person-hours charged once per roof and allocated across roof area.
@@ -225,6 +229,14 @@ C_{labor,y} = \sum_o (C_{variable,o,y} + C_{startup,o,y})
 $$
 
 where $h_o$ is person-hours per sqft, $s_o$ is startup person-hours, $w_{o,y}$ is the annual hourly wage, and $A$ is roof area.
+
+The portfolio page offers a portfolio-wide **Demand surge?** Yes/No choice. When Yes, source-computed installation labor uses the 2025 `H_PCT90` hourly wage from `labor_wages_wide.parquet`, grown with the existing occupation- and market-specific median projection:
+
+$$
+w_{o,y}^{surge} = H\_PCT90_{o,2025} \times \frac{H\_MEDIAN\_CONSTRAINED\_PROJECTED\_WAGE_{o,y}}{H\_MEDIAN_{o,2025}}
+$$
+
+This applies in every analysis year (2026-2050) and keeps the percentile's source-area and imputation provenance. Missing or nonpositive base wages for selected market/occupation pairs fail the run. The choice is part of run configuration and run identity; changing it requires a fresh run. `labor_growth_factor` remains median-based in both modes, so class-installed override fallbacks and their escalation remain unchanged.
 
 The wage projection table contains MSA and BOS rows. State/national fallback is already represented in the baseline wage provenance fields (`SOURCE_LEVEL`, `SOURCE_AREA`, and `IS_IMPUTED`) used to construct those area projections. The runtime therefore requires an exact existing `labor_market_id`; it does not perform another geography fallback.
 

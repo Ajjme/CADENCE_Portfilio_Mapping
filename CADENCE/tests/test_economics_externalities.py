@@ -36,7 +36,10 @@ def _config() -> EconomicsRunConfig:
     )
 
 
-def test_calculates_disposal_carbon_and_loss_of_use_from_current_roof() -> None:
+@pytest.mark.parametrize(("carbon_rate", "carbon_value"), [(2.0, 215.0), (2.5, 133.0)])
+def test_calculates_disposal_carbon_and_loss_of_use_from_current_roof(
+    carbon_rate: float, carbon_value: float
+) -> None:
     mass = build_material_mass_lookup(
         Path("Data/Material_Mass/roofing_lbs.csv"),
         MAPPING_ROOT / "master_mapping_reference_draft.csv",
@@ -71,7 +74,9 @@ def test_calculates_disposal_carbon_and_loss_of_use_from_current_roof() -> None:
     result = build_annual_external_costs(
         assets,
         mass,
-        _config(),
+        EconomicsRunConfig.model_validate({
+            **_config().model_dump(mode="json"), "scghg_discount_rate": carbon_rate,
+        }),
         Path("Data/Disposal/EREF_2024_Tipping_Fees_Parsed.csv"),
         Path("Data/Carbon/roofing_eol_emission_factors.csv"),
         Path("Data/Carbon/table_a5_1_scghg_unrounded_2020_2080.csv"),
@@ -87,8 +92,8 @@ def test_calculates_disposal_carbon_and_loss_of_use_from_current_roof() -> None:
     assert row["disposal_fee_usd_per_short_ton"] == pytest.approx(56.2)
     assert row["disposal_cost_usd"] == pytest.approx(2_250 / 2_000 * 56.2)
     assert row["landfill_kg_co2e"] == pytest.approx(22.5)
-    assert row["scghg_usd_per_metric_ton"] == pytest.approx(215.0)
-    assert row["carbon_cost_usd"] == pytest.approx(22.5 / 1_000 * 215.0)
+    assert row["scghg_usd_per_metric_ton"] == pytest.approx(carbon_value)
+    assert row["carbon_cost_usd"] == pytest.approx(22.5 / 1_000 * carbon_value)
     assert row["expected_loss_of_use_usd"] == pytest.approx(
         2.0 * row["housing_cost_usd_per_day"]
     )
