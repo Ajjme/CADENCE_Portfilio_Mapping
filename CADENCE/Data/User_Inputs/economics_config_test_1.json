@@ -1,0 +1,33 @@
+{
+  "start_year": 2026,
+  "end_year": 2050,
+  "enabled_cost_streams": [
+    "material",
+    "labor",
+    "disposal",
+    "carbon"
+  ],
+  "installed_cost_overrides": {
+    "OFFICIAL_ASPHALT": {
+      "installed_usd_per_sqft": 10.0,
+      "material_share": 0.6,
+      "labor_share": 0.4
+    },
+    "OFFICIAL_METAL": {
+      "installed_usd_per_sqft": 15.0,
+      "material_share": 0.7,
+      "labor_share": 0.3
+    },
+    "OFFICIAL_TILE": {
+      "installed_usd_per_sqft": 20.0,
+      "material_share": 0.5,
+      "labor_share": 0.5
+    }
+  },
+  "default_roof_shape": "gable",
+  "default_roof_deck_attachment": "8d_6in_12in",
+  "default_roof_wall_connection": "strap",
+  "scghg_discount_rate": 2.0,
+  "real_discount_rate": 0.02,
+  "operational_value_tolerance_percent": 20.0
+}
