@@ -1,5 +1,7 @@
 # CADENCE
 
+For an industry-advisor overview of delivered capabilities, validation, and current limitations, see the [CADENCE Progress Summary](docs/industry_advisor_summary.md).
+
 For the complete roof lifecycle comparison workflow, VS Code commands, graph instructions, and interpretation guidance, see [ALTERNATIVE_ANALYSIS_README.md](ALTERNATIVE_ANALYSIS_README.md).
 
 CADENCE is a modular roofing-resilience platform. Its implemented pipelines currently cover asset-scoped wind vulnerability and annual roof economics for the three official V1 material classes: Asphalt, Metal, and Tile.
