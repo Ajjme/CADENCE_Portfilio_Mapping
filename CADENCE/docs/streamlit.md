@@ -75,6 +75,7 @@ The page uses the completed session run or an explicitly selected existing run I
 | Alternative Summary | Final comparison chart and table; portfolio mode also shows asset-level rows |
 | Cost Allocations | Selected-year material, labor, expected repair, and enabled external-cost breakdown |
 | Wind Return Period | Baseline or selected-year climate-scaled gusts from the saved hazard results |
+| Roof Fragility Curves | Source wind-speed/building-loss curves for the baseline and all three alternatives in a selected modeled year |
 | Market Study | Experimental roof-stock shares, annual costs, and replacement decisions for the matching active portfolio run |
 | Run Information | Run location, generated HTML report path, configuration, source provenance, and metadata |
 
@@ -108,6 +109,20 @@ Material/labor splits allocate the effective installed cost using source shares 
 
 Baseline shows unscaled matched-grid 3-second gusts in mph at 10, 25, 50, 100, 250, and 500 years. Selecting a modeled year uses its saved climate-scaled gusts. The connecting curves interpolate against log return period for display; they do not fit a new hazard model. Portfolio mode shows individual asset curves, not an average portfolio wind speed.
 
+### Roof Fragility Curves
+
+Select a **Fragility year**, defaulting to the run's first modeled year. The shared Asset selector controls this tab: one asset shows its installed-roof baseline and New Asphalt, New Metal, and New Tile; Portfolio shows all four scenarios for every asset, without averaging or sampling.
+
+The horizontal axis is wind speed in mph on a linear scale. The vertical axis is modeled **building loss (%)** from terrain-averaged HAZUS proxies. It is not failure probability, measured roof-area damage, or expected annual damage. Markers show the actual analysis source points, joined by straight lines without fitting or extrapolating beyond their support. These are the curves evaluated by the analysis, not a reconstruction from its six wind return-period damage values. Climate scaling changes the hazard wind speeds evaluated against these curves, not the curves themselves.
+
+Hover exposes asset, scenario, year, active roof type, chronological age, lookup age, terrain, climate zone, wind speed, loss percentage, actual HAZUS proxy, source-curve count, and installation/replacement/age-cap flags. Asset colors and scenario line styles distinguish curves; legend entries toggle each asset/scenario. Identical curves can overlap. In particular, New Tile currently uses Metal vulnerability under the temporary Tile policy; the baseline for an existing Tile roof retains its own saved proxy.
+
+The displayed ages are the saved lifecycle state after any start-of-year installation or replacement. Lookup age is chronological roof age plus one, capped at 30; a newly installed roof therefore uses lookup age one. The baseline follows the current roof's lifecycle, including modeled in-kind replacements, rather than holding its original age fixed.
+
+New runs save the exact terrain-averaged points in a deduplicated `fragility_curves.parquet` snapshot. These charts can be reopened without the original reference datasets. Older runs without snapshots are shown only when their reference paths, sizes, modification timestamps, and supported mapping agree with the saved run. This legacy identity check is not a content-checksum verification; moving or touching reference files can require a rerun. Missing, changed, or inconsistent data makes this tab explicitly unavailable without disabling other tabs. A corrupt declared snapshot never falls back to current reference curves.
+
+This view provides chart hover values only, with no table or CSV download.
+
 ## Insurance View
 
 Choose an insurance run, Portfolio or one asset, a roof option, and a year. The dashboard shows insured value, annual premium, expected payout, underwriting margin, loss ratio, and break-even premium.
@@ -130,11 +145,13 @@ Working files live beneath `cadence_datalake/streamlit_sessions/<session_id>/`, 
 
 | Product | Relative location | Principal artifacts |
 |---|---|---|
-| Physical lifecycle | `roof_alternative_analysis/schema_version=v0.4.0/run_id=<id>/` | Annual state, damage, analysis, summary, HTML report, metadata |
+| Physical lifecycle | `roof_alternative_analysis/schema_version=v0.4.0/run_id=<id>/` | Annual state, damage, analysis, summary, HTML report, metadata; new runs also include the fragility-curve snapshot |
 | Linked economics reference | `roof_alternative_analysis/economics_reference/schema_version=v0.3.0/run_id=<id>/` | Annual option costs and metadata |
 | Insurance overlay | `roof_insurance_analysis/schema_version=v0.1.0/run_id=<id>/` | Policy snapshot, annual insurance, summary, metadata |
 
 Retain linked products together. The insurance ID is separate from the physical ID and includes policy/workbook identities and a formula version. Reopening physical results does not synthesize missing policy snapshots. Published run files must not be manually overwritten to update assumptions.
+
+Fragility snapshots are an additive extension of physical schema `v0.4.0`, with their own format version included in run identity. Rerunning inputs previously analyzed without snapshots creates a new run instead of modifying the historical one.
 
 ## Code Map
 

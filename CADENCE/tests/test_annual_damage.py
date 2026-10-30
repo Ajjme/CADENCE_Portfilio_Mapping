@@ -3,6 +3,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from cadence.reference_data.fragility import load_fragility_curves
 from cadence.vulnerability.annual_damage import (
     GUST_COLUMNS,
     build_annual_scenario_damage,
@@ -63,11 +64,12 @@ def test_recalculates_damage_by_age_and_deduplicates_shared_keys(
             {
                 "wind_speed_mph": [50.0, 100.0],
                 "building_loss_ratio": [0.0, roof_age / 10.0],
+                "source_curve_count": [2, 2],
             }
         )
 
     monkeypatch.setattr(
-        "cadence.vulnerability.annual_damage.load_terrain_averaged_curve", fake_curve
+        "cadence.reference_data.fragility.load_terrain_averaged_curve", fake_curve
     )
 
     result = build_annual_scenario_damage(
@@ -94,11 +96,12 @@ def test_preserves_chronological_age_cap_flag(monkeypatch: pytest.MonkeyPatch) -
         }
     )
     monkeypatch.setattr(
-        "cadence.vulnerability.annual_damage.load_terrain_averaged_curve",
+        "cadence.reference_data.fragility.load_terrain_averaged_curve",
         lambda *_: pl.DataFrame(
             {
                 "wind_speed_mph": [50.0, 100.0],
                 "building_loss_ratio": [0.0, 0.5],
+                "source_curve_count": [1, 1],
             }
         ),
     )
@@ -155,11 +158,12 @@ def test_scales_gusts_before_fragility_interpolation(
         }
     )
     monkeypatch.setattr(
-        "cadence.vulnerability.annual_damage.load_terrain_averaged_curve",
+        "cadence.reference_data.fragility.load_terrain_averaged_curve",
         lambda *_: pl.DataFrame(
             {
                 "wind_speed_mph": [50.0, 100.0],
                 "building_loss_ratio": [0.0, 1.0],
+                "source_curve_count": [1, 1],
             }
         ),
     )
@@ -191,3 +195,24 @@ def test_rejects_missing_or_invalid_climate_factors() -> None:
         build_annual_scenario_damage(
             state, _hazard(), Path("unused"), _factors(2026, factor=0.0)
         )
+
+
+def test_preloaded_curves_never_reload_missing_keys(monkeypatch):
+    state = pl.DataFrame({
+        "asset_id": ["A-1"], "year": [2026], "scenario_id": ["BASELINE_CURRENT"],
+        "scenario_material_id": ["OFFICIAL_ASPHALT"], "lookup_roof_age": [1],
+        "age_capped": [False],
+    })
+    monkeypatch.setattr(
+        "cadence.reference_data.fragility.load_terrain_averaged_curve",
+        lambda *_: pl.DataFrame({
+            "wind_speed_mph": [50.0, 100.0], "building_loss_ratio": [0.0, 0.5],
+            "source_curve_count": [1, 1],
+        }),
+    )
+    curves = load_fragility_curves(Path("unused"), pl.DataFrame({
+        "climate_zone": ["3A"], "lookup_roof_age": [2],
+        "source_material_id": ["OFFICIAL_ASPHALT"], "terrain_id": [3],
+    }))
+    with pytest.raises(ValueError, match="missing key"):
+        build_annual_scenario_damage(state, _hazard(), Path("unused"), _factors(2026), curves=curves)

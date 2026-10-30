@@ -198,6 +198,56 @@ def wind_return_period_figure(frame: pd.DataFrame, title: str) -> go.Figure:
     return figure
 
 
+def fragility_curve_figure(frame: pd.DataFrame, title: str) -> go.Figure:
+    """Plot unaltered analysis knots, retaining every asset/scenario identity."""
+    figure = go.Figure()
+    dashes = ("solid", "dash", "dot", "dashdot")
+    for asset_index, (asset_id, asset_rows) in enumerate(frame.groupby("asset_id", sort=True)):
+        color = qualitative.Plotly[asset_index % len(qualitative.Plotly)]
+        for scenario, dash in zip(SCENARIO_ORDER, dashes):
+            rows = asset_rows.loc[asset_rows["scenario_id"] == scenario].sort_values("wind_speed_mph").copy()
+            material = str(rows["scenario_material_id"].iloc[0])
+            label = scenario_labels(material)[scenario]
+            rows["scenario_label"] = label
+            rows["material_label"] = rows["scenario_material_id"].map(MATERIAL_NAMES)
+            for flag in ("age_capped", "burnout_replacement_event", "installation_event"):
+                rows[flag] = rows[flag].map({True: "Yes", False: "No"})
+            figure.add_scatter(
+                name=f"{asset_id} · {label}",
+                legendgroup=f"{asset_id}:{scenario}",
+                mode="lines+markers",
+                x=rows["wind_speed_mph"], y=rows["building_loss_ratio"],
+                line={"color": color, "width": 2, "dash": dash, "shape": "linear"},
+                marker={"color": color, "size": 4},
+                customdata=rows[[
+                    "asset_id", "scenario_label", "year", "material_label",
+                    "roof_age_years", "lookup_roof_age", "terrain_label", "climate_zone",
+                    "fragility_proxy_id", "source_curve_count", "age_capped",
+                    "burnout_replacement_event", "installation_event", "curve_provenance",
+                    "terrain_id",
+                ]].to_numpy(),
+                hovertemplate=(
+                    "Asset: %{customdata[0]}<br>Scenario: %{customdata[1]}"
+                    "<br>Year: %{customdata[2]}<br>Active roof: %{customdata[3]}"
+                    "<br>Roof age: %{customdata[4]} years · Lookup age: %{customdata[5]}"
+                    "<br>Terrain: %{customdata[6]} (%{customdata[14]}) · Climate zone: %{customdata[7]}"
+                    "<br>Wind speed: %{x:.1f} mph<br>Modeled building loss: %{y:.2%}"
+                    "<br>HAZUS proxy: %{customdata[8]} · Source curves: %{customdata[9]}"
+                    "<br>Age capped: %{customdata[10]} · Replacement this year: %{customdata[11]}"
+                    "<br>Installation this year: %{customdata[12]}"
+                    "<br>%{customdata[13]}<extra></extra>"
+                ),
+            )
+    _style_figure(figure, title, "Wind speed (mph)", "Modeled building loss (%)", "group")
+    figure.update_xaxes(type="linear")
+    figure.update_yaxes(range=[0, 1], tickformat=".0%")
+    figure.update_layout(
+        legend={"orientation": "v", "x": 1.02, "y": 1, "groupclick": "togglegroup"},
+        height=550,
+    )
+    return figure
+
+
 def _style_figure(
     figure: go.Figure,
     title: str,

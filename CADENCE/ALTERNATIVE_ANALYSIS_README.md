@@ -386,6 +386,7 @@ cadence_datalake/results/roof_alternative_analysis/
         ├── annual_alternative_analysis/
         │   └── year=YYYY/part-00000.parquet
         ├── alternative_summary.parquet
+        ├── fragility_curves.parquet
         ├── alternative_analysis_report.html
         └── run_metadata.json
 ```
@@ -422,6 +423,23 @@ Use this dataset to audit vulnerability:
 - fragility proxy and mapping version; and
 - incomplete-data flags.
 
+### `fragility_curves.parquet`
+
+New runs publish the exact terrain-averaged HAZUS building-loss points used for damage interpolation. Curves are loaded once per unique climate zone, lookup roof age, effective source material, and terrain, then shared by calculation and publication. The snapshot retains:
+
+- the curve key and effective HAZUS proxy;
+- mapping version and unresolved-variant aggregation method;
+- wind speed in mph and building-loss ratio; and
+- source-curve count at each wind speed.
+
+The annual state/damage rows associate each asset, year, and scenario with its curve. Shared curves are stored only once, including curves used by multiple assets or by both New Metal and New Tile. The latter uses Metal vulnerability under the temporary Tile policy; an existing Tile baseline follows its own saved proxy.
+
+The snapshot is an additive extension of physical schema `v0.4.0`, with an independent snapshot format version included in run identity. Metadata records its path, SHA-256 checksum, point/key counts, and aggregation method. A rerun creates a new immutable run rather than backfilling an older one. Cached new-format runs must retain a valid snapshot.
+
+The Streamlit **Roof Fragility Curves** tab, next to **Wind Return Period**, plots these source points for a selected modeled year. It shows all four scenarios for an asset or all assets/scenarios in portfolio mode. Its linear axes are wind speed and building-loss percentage, not return period or failure probability. Hover shows ages, terrain, material, and proxy provenance; no table or CSV export is added. Chronological age, the age-plus-one lookup capped at 30, and any start-of-year replacement are taken from the saved analysis.
+
+Snapshots can be displayed without the original reference data. For historical runs without this artifact, the dashboard checks the full run's saved fragility identity before reloading reference curves. That legacy identity uses file paths, sizes, and modification timestamps, not content hashes. Changed, moved, missing, or unsupported sources produce an unavailable message and rerun guidance; a corrupt declared snapshot does not fall back to reference data. See the [dashboard guide](docs/streamlit.md#roof-fragility-curves).
+
 ### `annual_alternative_analysis`
 
 This is the detailed economics fact table. It contains:
@@ -456,6 +474,7 @@ Use the manifest to confirm exactly what was modeled:
 - source checksums;
 - climate-delta path, checksum, and scaling rules;
 - fragility identity;
+- fragility snapshot format version, checksum, point/key counts, and aggregation provenance for new runs;
 - row counts;
 - EUL and cash-flow timing assumptions; and
 - all output paths.

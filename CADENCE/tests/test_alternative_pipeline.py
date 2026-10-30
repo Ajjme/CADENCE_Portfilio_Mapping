@@ -1,12 +1,20 @@
+import json
 from pathlib import Path
 
 import polars as pl
 import pytest
 
+from cadence.reference_data.fragility import CURVE_KEYS, FRAGILITY_SNAPSHOT_VERSION
+from cadence.vulnerability.expected_damage import (
+    RETURN_PERIODS,
+    integrate_damage_matrix,
+    interpolate_return_period_damage,
+)
 from cadence.economics.alternative_pipeline import (
     TEMPORARY_TILE_COST_MULTIPLIER,
     TEMPORARY_TILE_POLICY_ID,
     _source_paths,
+    _run_id,
     run_alternative_analysis_pipeline,
 )
 from cadence.economics.contracts import EconomicsRunConfig
@@ -43,6 +51,14 @@ def test_uses_repository_climate_scaling_as_default() -> None:
     assert paths["climate_delta"] == (
         repository_root / "Data" / "Climate_Delta" / "wind_climate_scaling.parquet"
     )
+
+
+def test_snapshot_version_changes_run_identity(monkeypatch):
+    frame = pl.DataFrame({"asset_id": ["A"]})
+    current = _run_id(frame, _config(), frame, None, {}, "reference")
+    monkeypatch.setattr("cadence.economics.alternative_pipeline.FRAGILITY_SNAPSHOT_VERSION", "")
+    legacy = _run_id(frame, _config(), frame, None, {}, "reference")
+    assert current != legacy
 
 
 def test_publishes_repeatable_alternative_analysis(
@@ -98,19 +114,22 @@ def test_publishes_repeatable_alternative_analysis(
             ).write_parquet(year_root / "part.parquet")
         return {"run_id": "economics-test", "annual_costs_path": str(root)}
 
-    def fake_damage(state, _, __, factors):
-        assert factors.height == 25
-        return state.join(
-            factors.select("year", "climate_scale_factor"), on="year", validate="m:1"
-        ).with_columns(pl.lit(0.01).alias("expected_damage_ratio"))
+    curve_calls = []
+
+    def fake_curve(root, climate_zone, roof_age, material_id, terrain_id):
+        curve_calls.append((climate_zone, roof_age, material_id, terrain_id))
+        return pl.DataFrame({
+            "wind_speed_mph": [50.0, 100.0],
+            "building_loss_ratio": [0.0, roof_age / 30.0],
+            "source_curve_count": [3, 3],
+        })
 
     monkeypatch.setattr(
         "cadence.economics.alternative_pipeline.run_economics_pipeline",
         fake_economics,
     )
     monkeypatch.setattr(
-        "cadence.economics.alternative_pipeline.build_annual_scenario_damage",
-        fake_damage,
+        "cadence.reference_data.fragility.load_terrain_averaged_curve", fake_curve,
     )
     monkeypatch.setattr(
         "cadence.economics.alternative_pipeline._fragility_identity",
@@ -153,6 +172,35 @@ def test_publishes_repeatable_alternative_analysis(
     assert (run_root / "alternative_summary.parquet").exists()
     assert (run_root / "alternative_analysis_report.html").exists()
     assert (run_root / "run_metadata.json").exists()
+    assert manifest["fragility_snapshot_version"] == FRAGILITY_SNAPSHOT_VERSION
+    curves = pl.read_parquet(run_root / "fragility_curves.parquet")
+    assert curves.height == manifest["fragility_curve_point_count"]
+    assert curves.select(CURVE_KEYS).unique().height == manifest["fragility_curve_key_count"]
+    assert len(curve_calls) == len(set(curve_calls)) == manifest["fragility_curve_key_count"]
+    assert curves["source_curve_count"].unique().to_list() == [3]
+    all_damage = pl.read_parquet(
+        str(run_root / "annual_scenario_damage" / "year=*" / "*.parquet"),
+        hive_partitioning=False,
+    )
+    for row in all_damage.iter_rows(named=True):
+        curve = curves.filter(
+            (pl.col("climate_zone") == row["climate_zone"])
+            & (pl.col("terrain_id") == row["terrain_id"])
+            & (pl.col("lookup_roof_age") == row["lookup_roof_age"])
+            & (pl.col("fragility_proxy_id") == row["fragility_proxy_id"])
+        ).sort("wind_speed_mph")
+        assert curve["wind_speed_mph"].to_list() == [50.0, 100.0]
+        assert curve["building_loss_ratio"].to_list() == [0.0, row["lookup_roof_age"] / 30.0]
+        interpolated, _, _ = interpolate_return_period_damage(
+            [row[f"climate_scaled_{column}"] for column in GUST_COLUMNS],
+            curve["wind_speed_mph"].to_numpy(), curve["building_loss_ratio"].to_numpy(),
+        )
+        assert interpolated.tolist() == pytest.approx(
+            [row[f"rp_{period}_damage_ratio"] for period in RETURN_PERIODS]
+        )
+        assert row["expected_damage_ratio"] == pytest.approx(
+            integrate_damage_matrix(interpolated.reshape(1, -1))[0]
+        )
     state = pl.read_parquet(
         run_root / "annual_scenario_state" / "year=2026" / "part-00000.parquet"
     )
@@ -205,3 +253,19 @@ def test_publishes_repeatable_alternative_analysis(
     tile = summary.filter(pl.col("scenario_id") == "NEW_TILE").row(0, named=True)
     assert tile["active_cost_source"] == TEMPORARY_TILE_POLICY_ID
     assert tile["active_cost_fallback_applied"] is False
+
+    metadata_path = run_root / "run_metadata.json"
+    invalid_metadata = {**manifest, "fragility_curve_key_count": -1}
+    metadata_path.write_text(json.dumps(invalid_metadata), encoding="utf-8")
+    with pytest.raises(ValueError, match="snapshot counts"):
+        run_alternative_analysis_pipeline(
+            assets, _config(), hazard, Path.cwd(), Path("unused"),
+            tmp_path / "analysis", climate_delta_path=climate_path,
+        )
+    metadata_path.write_text(json.dumps(manifest), encoding="utf-8")
+    (run_root / "fragility_curves.parquet").write_bytes(b"corrupt")
+    with pytest.raises(ValueError, match="invalid fragility snapshot"):
+        run_alternative_analysis_pipeline(
+            assets, _config(), hazard, Path.cwd(), Path("unused"),
+            tmp_path / "analysis", climate_delta_path=climate_path,
+        )

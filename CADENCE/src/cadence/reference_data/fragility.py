@@ -6,6 +6,9 @@ import duckdb
 import polars as pl
 
 FRAGILITY_MAPPING_VERSION = "v1.0.0"
+FRAGILITY_SNAPSHOT_VERSION = "v1.0.0"
+CURVE_AGGREGATION_METHOD = "equal_average_unresolved_variants_within_terrain"
+CURVE_KEYS = ("climate_zone", "lookup_roof_age", "source_material_id", "terrain_id")
 MATERIAL_PROXY_IDS = {
     "OFFICIAL_ASPHALT": "WSF1",
     "OFFICIAL_METAL": "SERBL",
@@ -21,6 +24,70 @@ TERRAIN_LABELS = {
 TERRAIN_IDS_BY_LABEL = {
     label.casefold(): terrain_id for terrain_id, label in TERRAIN_LABELS.items()
 }
+
+
+def load_fragility_curves(fragility_root: Path, keys: pl.DataFrame) -> pl.DataFrame:
+    """Load each effective curve once, retaining its analysis provenance."""
+    curves = []
+    for key in keys.select(CURVE_KEYS).unique().sort(CURVE_KEYS).iter_rows(named=True):
+        curve = load_terrain_averaged_curve(
+            fragility_root, key["climate_zone"], key["lookup_roof_age"],
+            key["source_material_id"], key["terrain_id"],
+        )
+        curves.append(curve.with_columns(
+            *(pl.lit(value).alias(name) for name, value in key.items()),
+            pl.lit(MATERIAL_PROXY_IDS[key["source_material_id"]]).alias("fragility_proxy_id"),
+            pl.lit(FRAGILITY_MAPPING_VERSION).alias("fragility_mapping_version"),
+            pl.lit(CURVE_AGGREGATION_METHOD).alias("curve_aggregation_method"),
+        ))
+    if not curves:
+        raise ValueError("no fragility curve keys were requested")
+    result = pl.concat(curves)
+    validate_fragility_curves(result)
+    return result.sort([*CURVE_KEYS, "wind_speed_mph"])
+
+
+def validate_fragility_curves(curves: pl.DataFrame) -> None:
+    """Reject incomplete or inconsistent saved analysis curves."""
+    required = {
+        *CURVE_KEYS, "wind_speed_mph", "building_loss_ratio", "source_curve_count",
+        "fragility_proxy_id", "fragility_mapping_version", "curve_aggregation_method",
+    }
+    missing = sorted(required - set(curves.columns))
+    if missing:
+        raise ValueError(f"fragility curves are missing required columns: {missing}")
+    if curves.is_empty() or curves.select(
+        pl.any_horizontal(pl.col(name).is_null() for name in sorted(required)).any()
+    ).item():
+        raise ValueError("fragility curves are empty or contain missing values")
+    if curves.filter(
+        ~pl.col("source_material_id").is_in(MATERIAL_PROXY_IDS)
+        | ~pl.col("terrain_id").is_in(TERRAIN_LABELS)
+        | ~pl.col("lookup_roof_age").is_between(1, 30)
+        | (pl.col("lookup_roof_age") != pl.col("lookup_roof_age").floor())
+        | (pl.col("fragility_mapping_version") != FRAGILITY_MAPPING_VERSION)
+        | (pl.col("curve_aggregation_method") != CURVE_AGGREGATION_METHOD)
+    ).height:
+        raise ValueError("fragility curves have unsupported keys or mapping provenance")
+    if curves.filter(
+        pl.col("fragility_proxy_id")
+        != pl.col("source_material_id").replace_strict(MATERIAL_PROXY_IDS)
+    ).height:
+        raise ValueError("fragility curve proxy does not match its source material")
+    if curves.filter(
+        ~pl.col("wind_speed_mph").is_finite()
+        | (pl.col("wind_speed_mph") < 0)
+        | ~pl.col("building_loss_ratio").is_finite()
+        | ~pl.col("building_loss_ratio").is_between(0, 1)
+        | ~pl.col("source_curve_count").is_finite()
+        | (pl.col("source_curve_count") < 1)
+        | (pl.col("source_curve_count") != pl.col("source_curve_count").floor())
+    ).height:
+        raise ValueError("fragility curve points or source counts are invalid")
+    if curves.select([*CURVE_KEYS, "wind_speed_mph"]).is_duplicated().any():
+        raise ValueError("fragility curves contain duplicate wind speeds")
+    if curves.group_by(CURVE_KEYS).len().filter(pl.col("len") < 2).height:
+        raise ValueError("fragility curves require at least two points per key")
 
 
 def load_terrain_averaged_curve(

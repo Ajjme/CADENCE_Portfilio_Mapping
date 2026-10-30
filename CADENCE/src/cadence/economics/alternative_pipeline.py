@@ -25,6 +25,13 @@ from cadence.economics.temporary_policies import (
     TEMPORARY_TILE_POLICY_ID,
 )
 from cadence.reference_data.climate_delta import resolve_climate_scale_factors
+from cadence.reference_data.fragility import (
+    CURVE_AGGREGATION_METHOD,
+    CURVE_KEYS,
+    FRAGILITY_SNAPSHOT_VERSION,
+    load_fragility_curves,
+    validate_fragility_curves,
+)
 from cadence.reference_data.year1_damage import _fragility_identity
 from cadence.vulnerability.annual_damage import GUST_COLUMNS, build_annual_scenario_damage
 
@@ -78,6 +85,22 @@ def run_alternative_analysis_pipeline(
     manifest_path = run_root / "run_metadata.json"
     if manifest_path.exists():
         cached = json.loads(manifest_path.read_text(encoding="utf-8"))
+        snapshot = run_root / "fragility_curves.parquet"
+        if (
+            cached.get("fragility_snapshot_version") != FRAGILITY_SNAPSHOT_VERSION
+            or cached.get("fragility_curve_aggregation_method") != CURVE_AGGREGATION_METHOD
+            or Path(str(cached.get("fragility_curves_path", ""))).resolve() != snapshot.resolve()
+            or not snapshot.is_file()
+            or cached.get("fragility_curves_checksum") != _sha256(snapshot)
+        ):
+            raise ValueError("cached analysis has an incomplete or invalid fragility snapshot")
+        cached_curves = pl.read_parquet(snapshot)
+        validate_fragility_curves(cached_curves)
+        if (
+            cached_curves.height != cached.get("fragility_curve_point_count")
+            or cached_curves.select(CURVE_KEYS).unique().height != cached.get("fragility_curve_key_count")
+        ):
+            raise ValueError("cached fragility snapshot counts do not match metadata")
         cached["cache_hit"] = True
         return cached
 
@@ -100,8 +123,16 @@ def run_alternative_analysis_pipeline(
         .otherwise(pl.col("scenario_material_id"))
         .alias("scenario_material_id")
     )
+    curve_keys = damage_state.select(
+        "asset_id", "lookup_roof_age",
+        pl.col("scenario_material_id").alias("source_material_id"),
+    ).unique().join(
+        asset_scoped_damage.select("asset_id", "climate_zone", "terrain_id").unique(),
+        on="asset_id", how="left", validate="m:1",
+    )
+    curves = load_fragility_curves(fragility_root, curve_keys)
     annual_damage = build_annual_scenario_damage(
-        damage_state, asset_scoped_damage, fragility_root, climate_factors
+        damage_state, asset_scoped_damage, fragility_root, climate_factors, curves=curves,
     ).with_columns(
         pl.when(pl.col("scenario_id") == "NEW_TILE")
         .then(pl.lit("OFFICIAL_TILE"))
@@ -134,6 +165,8 @@ def run_alternative_analysis_pipeline(
     _write_partitioned(annual_state, run_root / "annual_scenario_state")
     _write_partitioned(annual_damage, run_root / "annual_scenario_damage")
     _write_partitioned(annual_analysis, run_root / "annual_alternative_analysis")
+    curves_path = run_root / "fragility_curves.parquet"
+    curves.write_parquet(curves_path)
     summary_path = run_root / "alternative_summary.parquet"
     summary.write_parquet(summary_path)
     report_path = run_root / "alternative_analysis_report.html"
@@ -146,6 +179,12 @@ def run_alternative_analysis_pipeline(
         "run_config": config.model_dump(mode="json"),
         "source_checksums": source_checksums,
         "fragility_identity": fragility_identity,
+        "fragility_snapshot_version": FRAGILITY_SNAPSHOT_VERSION,
+        "fragility_curves_path": str(curves_path),
+        "fragility_curves_checksum": _sha256(curves_path),
+        "fragility_curve_point_count": curves.height,
+        "fragility_curve_key_count": curves.select(CURVE_KEYS).unique().height,
+        "fragility_curve_aggregation_method": CURVE_AGGREGATION_METHOD,
         "economics_reference_run_id": economics_manifest["run_id"],
         "asset_count": assets.height,
         "scenario_count_per_asset_year": 4,
@@ -271,6 +310,7 @@ def _run_id(
     digest.update(json.dumps(source_checksums, sort_keys=True).encode("utf-8"))
     digest.update(fragility_identity.encode("utf-8"))
     digest.update(TEMPORARY_TILE_POLICY_ID.encode("utf-8"))
+    digest.update(FRAGILITY_SNAPSHOT_VERSION.encode("utf-8"))
     return digest.hexdigest()[:24]
 
 

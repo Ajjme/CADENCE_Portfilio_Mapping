@@ -9,10 +9,24 @@ from typing import Any
 import duckdb
 import numpy as np
 import pandas as pd
+import polars as pl
 import streamlit as st
 
-from cadence.ui.charts import COST_COMPONENTS, MATERIAL_NAMES
-from cadence.ui.paths import ALTERNATIVE_RESULTS_ROOT
+from cadence.economics.temporary_policies import TEMPORARY_TILE_POLICY_ID
+from cadence.reference_data.fragility import (
+    CURVE_AGGREGATION_METHOD,
+    CURVE_KEYS,
+    FRAGILITY_MAPPING_VERSION,
+    FRAGILITY_SNAPSHOT_VERSION,
+    MATERIAL_PROXY_IDS,
+    TERRAIN_LABELS,
+    load_fragility_curves,
+    validate_fragility_curves,
+)
+from cadence.reference_data.year1_damage import _fragility_identity
+from cadence.ui.charts import COST_COMPONENTS, MATERIAL_NAMES, SCENARIO_ORDER
+from cadence.ui.paths import ALTERNATIVE_RESULTS_ROOT, FRAGILITY_ROOT
+from cadence.ui.workbooks import sha256_file
 from cadence.vulnerability.expected_damage import RETURN_PERIODS
 
 SUPPORTED_SCHEMAS = {"v0.4.0"}
@@ -301,6 +315,154 @@ def load_wind_return_periods(
     if rows["wind_grid_id"].isna().any() or not np.isfinite(values).all() or (values <= 0).any():
         raise ValueError("wind return-period values or matched grid IDs are invalid")
     return rows.rename(columns=dict(zip(gusts, (f"rp_{period}" for period in RETURN_PERIODS))))
+
+
+def load_fragility_results(run_root: str, asset_id: str, year: int) -> pd.DataFrame:
+    """Expose the selected run's effective curves, never unverified current sources."""
+    metadata = load_run_metadata(run_root)
+    start = int(metadata["run_config"]["start_year"])
+    end = int(metadata["run_config"]["end_year"])
+    if year < start or year > end:
+        raise ValueError(f"year {year} is outside the run's modeled years")
+    root = Path(run_root).resolve()
+    common = ["asset_id", "year", "scenario_id", "scenario_material_id", "lookup_roof_age", "age_capped"]
+    state_columns = [
+        *common, "roof_age_years", "installation_event", "burnout_replacement_event",
+        "temporary_tile_metal_proxy_applied",
+    ]
+    damage_columns = [
+        *common, "climate_zone", "terrain_id", "fragility_proxy_id",
+        "fragility_mapping_version", "curve_aggregation_method",
+    ]
+    frames = []
+    where = "" if asset_id == PORTFOLIO_OPTION else "WHERE asset_id = ?"
+    params = [] if asset_id == PORTFOLIO_OPTION else [asset_id]
+    for artifact, key, columns in (
+        ("annual_scenario_state", "annual_state_path", state_columns),
+        ("annual_scenario_damage", "annual_damage_path", damage_columns),
+    ):
+        partition = _fragility_partition(root, metadata, artifact, key, year)
+        frames.append(duckdb_connection().execute(
+            f"SELECT {', '.join(columns)} FROM read_parquet('{_sql_path(partition / '*.parquet')}') {where}",
+            params,
+        ).fetchdf())
+    state, damage = frames
+    identity = ["asset_id", "year", "scenario_id"]
+    for frame in frames:
+        if frame.empty or frame.isna().any().any() or frame.duplicated(identity).any():
+            raise ValueError("fragility state/damage rows are missing, null, or duplicated")
+    rows = state.merge(damage, on=common, how="outer", validate="one_to_one", indicator=True)
+    if (rows["_merge"] != "both").any() or (rows["year"] != year).any():
+        raise ValueError("fragility state and damage rows are inconsistent")
+    rows = rows.drop(columns="_merge")
+    summary_path = _sql_path(root / "alternative_summary.parquet")
+    run_assets = set(duckdb_connection().execute(
+        f"SELECT DISTINCT asset_id FROM read_parquet('{summary_path}')"
+    ).fetchdf()["asset_id"])
+    expected_assets = run_assets if asset_id == PORTFOLIO_OPTION else {asset_id}
+    if not expected_assets.issubset(run_assets) or set(rows["asset_id"]) != expected_assets:
+        raise ValueError("fragility results are missing for a selected asset")
+    if any(set(group["scenario_id"]) != set(SCENARIO_ORDER) for _, group in rows.groupby("asset_id")):
+        raise ValueError("fragility results require all four scenarios for every asset")
+    if (
+        not rows["scenario_material_id"].isin(MATERIAL_PROXY_IDS).all()
+        or not rows["terrain_id"].isin(TERRAIN_LABELS).all()
+        or not (rows["fragility_mapping_version"] == FRAGILITY_MAPPING_VERSION).all()
+        or not (rows["curve_aggregation_method"] == CURVE_AGGREGATION_METHOD).all()
+    ):
+        raise ValueError("fragility results have unsupported mapping or terrain provenance")
+    ages = rows["roof_age_years"].to_numpy(dtype=float)
+    if (
+        not np.isfinite(ages).all() or (ages < 0).any() or (ages != np.floor(ages)).any()
+        or not np.array_equal(rows["lookup_roof_age"], np.clip(ages + 1, 1, 30))
+        or not np.array_equal(rows["age_capped"], ages + 1 > 30)
+    ):
+        raise ValueError("fragility results have inconsistent chronological or lookup ages")
+    tile = rows["scenario_id"] == "NEW_TILE"
+    policy = metadata.get("temporary_tile_policy", {})
+    if (
+        policy.get("policy_id") != TEMPORARY_TILE_POLICY_ID
+        or policy.get("lifecycle_and_vulnerability_source") != "NEW_METAL"
+        or not np.array_equal(rows["temporary_tile_metal_proxy_applied"], tile)
+    ):
+        raise ValueError("fragility results have unsupported Tile proxy provenance")
+    rows["source_material_id"] = rows["scenario_material_id"].where(~tile, "OFFICIAL_METAL")
+    if not (rows["fragility_proxy_id"] == rows["source_material_id"].map(MATERIAL_PROXY_IDS)).all():
+        raise ValueError("saved fragility proxy does not match the scenario's effective material")
+
+    snapshot_fields = (
+        "fragility_snapshot_version", "fragility_curves_path", "fragility_curves_checksum",
+        "fragility_curve_point_count", "fragility_curve_key_count", "fragility_curve_aggregation_method",
+    )
+    if any(field in metadata for field in snapshot_fields):
+        snapshot = root / "fragility_curves.parquet"
+        if (
+            metadata.get("fragility_snapshot_version") != FRAGILITY_SNAPSHOT_VERSION
+            or metadata.get("fragility_curve_aggregation_method") != CURVE_AGGREGATION_METHOD
+            or Path(str(metadata.get("fragility_curves_path", ""))).resolve() != snapshot
+            or not snapshot.is_file()
+        ):
+            raise ValueError("declared fragility snapshot is missing or unsupported")
+        checksum = sha256_file(snapshot)
+        if checksum != metadata.get("fragility_curves_checksum"):
+            raise ValueError("fragility snapshot checksum does not match the saved run")
+        curves = _load_saved_fragility_curves(str(snapshot), checksum)
+        if (
+            len(curves) != metadata.get("fragility_curve_point_count")
+            or len(curves[list(CURVE_KEYS)].drop_duplicates()) != metadata.get("fragility_curve_key_count")
+        ):
+            raise ValueError("fragility snapshot counts do not match the saved run")
+        provenance = "Saved curve snapshot"
+    else:
+        for modeled_year in range(start, end + 1):
+            _fragility_partition(root, metadata, "annual_scenario_damage", "annual_damage_path", modeled_year)
+        pattern = _sql_path(root / "annual_scenario_damage" / "year=*" / "*.parquet")
+        partitions = duckdb_connection().execute(
+            f"SELECT DISTINCT climate_zone, lookup_roof_age FROM read_parquet('{pattern}', hive_partitioning=false)"
+        ).pl()
+        source_identity = _fragility_identity(partitions, FRAGILITY_ROOT)
+        if source_identity != metadata.get("fragility_identity"):
+            raise ValueError("legacy fragility sources no longer match the saved run; rerun the analysis")
+        keys = rows[list(CURVE_KEYS)].drop_duplicates().sort_values(list(CURVE_KEYS)).reset_index(drop=True)
+        curves = _load_verified_reference_curves(str(FRAGILITY_ROOT), keys, source_identity)
+        provenance = "Identity-verified legacy reference"
+
+    keys = list(CURVE_KEYS)
+    available = curves[keys].drop_duplicates()
+    matched = rows.merge(available, on=keys, how="left", validate="many_to_one", indicator=True)
+    if (matched["_merge"] != "both").any():
+        raise ValueError("fragility snapshot is missing a required scenario curve")
+    points = curves[[*keys, "wind_speed_mph", "building_loss_ratio", "source_curve_count"]]
+    result = rows.merge(points, on=keys, how="inner", validate="many_to_many")
+    result["terrain_label"] = result["terrain_id"].map(TERRAIN_LABELS)
+    result["curve_provenance"] = provenance
+    return result.sort_values(["asset_id", "scenario_id", "wind_speed_mph"]).reset_index(drop=True)
+
+
+def _fragility_partition(
+    root: Path, metadata: dict[str, Any], artifact: str, metadata_key: str, year: int,
+) -> Path:
+    expected = root / artifact
+    if Path(str(metadata.get(metadata_key, ""))).resolve() != expected:
+        raise ValueError(f"{artifact} path does not match the selected run")
+    partition = expected / f"year={year}"
+    if not partition.is_dir() or not list(partition.glob("*.parquet")):
+        raise ValueError(f"{artifact} results are missing for {year}")
+    return partition
+
+
+@st.cache_data(show_spinner=False)
+def _load_saved_fragility_curves(path: str, checksum: str) -> pd.DataFrame:
+    curves = pl.read_parquet(path)
+    validate_fragility_curves(curves)
+    return curves.to_pandas()
+
+
+@st.cache_data(show_spinner=False)
+def _load_verified_reference_curves(
+    root: str, keys: pd.DataFrame, source_identity: str,
+) -> pd.DataFrame:
+    return load_fragility_curves(Path(root), pl.from_pandas(keys)).to_pandas()
 
 
 @st.cache_data(show_spinner=False, ttl=86400)

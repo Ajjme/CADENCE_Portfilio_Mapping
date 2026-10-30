@@ -332,7 +332,7 @@ def test_results_navigation_includes_market_study(monkeypatch):
     })
     monkeypatch.setattr(results, "load_summary", lambda _: pd.DataFrame({"asset_id": ["A"]}))
     for name in ("_render_overview", "_render_time_series", "_render_alternative_summary",
-                 "_render_cost_allocations", "_render_wind_return_period", "_render_run_information"):
+                 "_render_cost_allocations", "_render_wind_return_period", "_render_fragility_curves", "_render_run_information"):
         monkeypatch.setattr(results, name, lambda *args: None)
     def results_page():
         from cadence.ui.pages import results
@@ -343,7 +343,7 @@ def test_results_navigation_includes_market_study(monkeypatch):
     assert not app.exception
     assert [tab.label for tab in app.tabs] == [
         "Overview", "Time Series", "Alternative Summary", "Cost Allocations",
-        "Wind Return Period", "Market Study", "Run Information",
+        "Wind Return Period", "Roof Fragility Curves", "Market Study", "Run Information",
     ]
     assert any("Experimental study" in warning.value for warning in app.warning)
     assert any("matching active session" in message.value for message in app.info)

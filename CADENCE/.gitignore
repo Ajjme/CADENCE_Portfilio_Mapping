@@ -50,3 +50,9 @@ Data/Climate_Zones/*
 !Data/User_Inputs/economics_config_test_1.json
 !Data/Wind_Return_Periods/gev_return_periods.csv
 !Data_Catalogs/Mapping/*.csv
+!Data_Catalogs/Climate_data_catalog.xlsx
+!Data_Catalogs/Economic_data_catalog.xlsx
+!Data_Catalogs/Intermidate_products_and_final_outputs_data_catalog.xlsx
+!Data_Catalogs/User_inputs_data_catalog.xlsx
+!Data_Catalogs/Vulnerability_data_catalog.xlsx
+!Data_Catalogs/Consolidated_data_catalog.xlsx

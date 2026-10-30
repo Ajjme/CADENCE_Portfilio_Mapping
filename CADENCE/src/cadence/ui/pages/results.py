@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from duckdb import Error as DuckDBError
 import pandas as pd
+from polars.exceptions import PolarsError
 import streamlit as st
 
 from cadence.economics.market_pipeline import run_market_study
@@ -13,6 +15,7 @@ from cadence.ui.charts import (
     MATERIAL_NAMES,
     comparison_figure,
     cost_allocation_figure,
+    fragility_curve_figure,
     market_cost_figure,
     market_share_figure,
     scenario_labels,
@@ -33,6 +36,7 @@ from cadence.ui.results_data import (
     load_asset_series,
     load_year_cost_rows,
     load_current_materials,
+    load_fragility_results,
     load_map_geography,
     load_portfolio_series,
     load_run_metadata,
@@ -86,8 +90,8 @@ def render() -> None:
         f"{metadata['asset_count']:,} assets · Real 2026 USD"
     )
 
-    overview_tab, time_tab, summary_tab, cost_tab, wind_tab, study_tab, run_tab = st.tabs(
-        ["Overview", "Time Series", "Alternative Summary", "Cost Allocations", "Wind Return Period", "Market Study", "Run Information"]
+    overview_tab, time_tab, summary_tab, cost_tab, wind_tab, fragility_tab, study_tab, run_tab = st.tabs(
+        ["Overview", "Time Series", "Alternative Summary", "Cost Allocations", "Wind Return Period", "Roof Fragility Curves", "Market Study", "Run Information"]
     )
     with overview_tab:
         _render_overview(run_root, summary, selected_asset)
@@ -99,6 +103,8 @@ def render() -> None:
         _render_cost_allocations(run_root, selected_asset, metadata)
     with wind_tab:
         _render_wind_return_period(run_root, selected_asset, metadata)
+    with fragility_tab:
+        _render_fragility_curves(run_root, selected_asset, metadata)
     with study_tab:
         _render_market_study(run_root, selected_asset)
     with run_tab:
@@ -377,6 +383,40 @@ def _render_wind_return_period(run_root: str, asset_id: str, metadata: dict) -> 
         wind_return_period_figure(gusts, f"{label} · {period} wind return periods"),
         config={"displaylogo": False, "responsive": True},
     )
+
+
+def _render_fragility_curves(run_root: str, asset_id: str, metadata: dict) -> None:
+    config = metadata["run_config"]
+    year = st.selectbox(
+        "Fragility year", range(int(config["start_year"]), int(config["end_year"]) + 1),
+        key=f"results_fragility_year_{metadata['run_id']}",
+    )
+    try:
+        curves = load_fragility_results(run_root, asset_id, year)
+    except (ValueError, OSError, KeyError, DuckDBError, PolarsError) as error:
+        st.warning(f"Roof fragility curves are unavailable: {error}. Restore the matching artifacts or rerun the analysis.")
+        return
+    label = "Portfolio" if asset_id == PORTFOLIO_OPTION else asset_id
+    st.plotly_chart(
+        fragility_curve_figure(curves, f"{label} · {year} roof fragility curves"),
+        config={"displaylogo": False, "responsive": True},
+    )
+    st.caption(
+        "HAZUS building-loss proxies averaged across unresolved variants within terrain; "
+        "not failure probability, measured roof-area damage, or expected annual damage. "
+        "Markers are source points; straight lines connect them without fitting or extrapolation."
+    )
+    st.caption(
+        "All four scenarios are shown for every selected asset. New Tile uses Metal vulnerability "
+        "under the temporary Tile policy, so curves may overlap. Use legend toggles to inspect them."
+    )
+    st.caption(
+        "The selected year uses the saved roof age after any start-of-year replacement. "
+        "Lookup age is roof age + 1, capped at 30. Climate scaling changes wind hazard, not these curves. "
+        f"Source: {curves['curve_provenance'].iloc[0]}."
+    )
+    if curves["curve_provenance"].iloc[0] == "Identity-verified legacy reference":
+        st.caption("Legacy verification compares source paths, sizes, and modification timestamps; it is not a content-checksum verification.")
 
 
 def _render_run_information(metadata: dict, run_root: str) -> None:

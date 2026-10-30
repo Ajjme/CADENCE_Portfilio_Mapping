@@ -4,6 +4,10 @@ For an industry-advisor overview of delivered capabilities, validation, and curr
 
 For the complete roof lifecycle comparison workflow, VS Code commands, graph instructions, and interpretation guidance, see [ALTERNATIVE_ANALYSIS_README.md](ALTERNATIVE_ANALYSIS_README.md).
 
+For the planned roof-covering carbon extension, scope exclusions, required inputs, and deferred transportation and operational-energy work, see [CARBON_ANALYSIS_README.md](CARBON_ANALYSIS_README.md).
+
+For the separate transportation plan, including nearest eligible landfill matching, road distances, haulage costs, and emissions, see [TRANSPORTATION_ANALYSIS_README.md](TRANSPORTATION_ANALYSIS_README.md).
+
 CADENCE is a modular roofing-resilience platform. Its implemented pipelines currently cover asset-scoped wind vulnerability and annual roof economics for the three official V1 material classes: Asphalt, Metal, and Tile.
 
 ## Streamlit Application
