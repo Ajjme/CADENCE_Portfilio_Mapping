@@ -104,3 +104,20 @@ def coverage_figure(row: pd.Series) -> go.Figure:
         yaxis={"title": "", "autorange": "reversed"}, showlegend=False,
     )
     return figure
+
+
+def event_comparison_figure(rows: pd.DataFrame, category: str, title: str) -> go.Figure:
+    """Independent event totals; missing amounts stay gaps rather than zero bars."""
+    figure = go.Figure()
+    for metric, label, color in (
+        ("gross_event_damage_usd", "Gross event damage", "#d47552"),
+        ("insured_event_payout_usd", "Insured event payout", "#237b66"),
+    ):
+        figure.add_bar(
+            x=rows[category], y=rows[metric], name=label, marker_color=color,
+            hovertemplate="%{x}<br>%{y:$,.0f}<extra>%{fullData.name}</extra>",
+        )
+    _finish(figure, title, "Real 2026 USD")
+    figure.update_layout(barmode="group", xaxis={"title": "", "type": "category", "dtick": 1},
+                         yaxis={"rangemode": "tozero"})
+    return figure

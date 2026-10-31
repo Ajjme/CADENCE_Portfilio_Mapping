@@ -44,10 +44,11 @@ def market_cost_figure(costs: pd.DataFrame) -> go.Figure:
               "disposal_usd": "#7980a2", "carbon_usd": "#a69f77"}
     for column, color in colors.items():
         figure.add_bar(name=COST_COMPONENTS[column], x=costs["year"], y=costs[column],
-                       customdata=costs[["replacement_count", "eul_replacements", "damage_replacements", "unknown_count"]],
+                       customdata=costs[["replacement_count", "eul_replacements", "damage_replacements", "unknown_count",
+                                         "economic_replacements"]],
                        marker_color=color,
                        hovertemplate="%{x}<br>%{y:$,.0f}<br>Replacements: %{customdata[0]:.0f}"
-                                     " (EUL %{customdata[1]:.0f}, damage %{customdata[2]:.0f})"
+                                     " (EUL %{customdata[1]:.0f}, damage %{customdata[2]:.0f}, economic %{customdata[4]:.0f})"
                                      "<br>Unknown: %{customdata[3]:.0f}<extra>%{fullData.name}</extra>")
     figure.update_layout(title="Expected annual portfolio costs", barmode="stack", xaxis_title="Year",
                          yaxis_title="Real 2026 USD", margin=dict(l=24, r=24, t=56, b=30))

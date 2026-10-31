@@ -1,8 +1,22 @@
 # Streamlit Dashboard Guide
 
-The CADENCE dashboard has three pages: **Asset Portfolio**, **Alternative Analysis Results**, and **Insurance View**. It orchestrates the Python pipelines and reads saved results; the scientific and economic calculations live outside the page renderers.
+The CADENCE dashboard has four pages: **Asset Portfolio**, **Alternative Analysis Results**, **Insurance View**, and **Program View**. It orchestrates the Python pipelines and reads saved results; the scientific and economic calculations live outside the page renderers.
 
 For lifecycle formulas, see [Alternative Analysis](../ALTERNATIVE_ANALYSIS_README.md). For source-cost assumptions and insurance terms, see [Economics](economics.md) and [Insurance](insurance.md).
+
+## Program View
+
+Open **Program View** (`/program`) to calculate one home's incentive requirements
+for every possible installation year. Create a saved Program run from a compatible
+physical run, then compare the economic break-even grant and incremental upfront
+gap for a selected target roof. The page includes separate conventional-roof
+counterfactuals, manual year selection, recommendations, a reconciliation waterfall,
+CSV audits, and unpriced public-good explanation buttons.
+
+This is a pre-insurance proxy, not guaranteed adoption or a portfolio budget.
+Remaining roof value is excluded. Existing physical runs without valid fragility
+snapshots need a matching rerun; saved Program runs reopen independently of the
+session. See [Program View](program.md) for the complete workflow and formulas.
 
 ## Install And Launch
 
@@ -125,7 +139,15 @@ This view provides chart hover values only, with no table or CSV download.
 
 ## Insurance View
 
-Choose an insurance run, Portfolio or one asset, a roof option, and a year. The dashboard shows insured value, annual premium, expected payout, underwriting margin, loss ratio, and break-even premium.
+Choose an insurance run, then **Event stress test** (default) or **Annualized losses**. These modes are separate; neither changes any other view or the physical model.
+
+**Event stress test:** choose a year, 100/200/300/500-year wind, and All portfolio or Selected states, then click **Run event simulation**. Defaults are the first run year, 100-year wind, and all assets. Gross damage is the selected event damage ratio times full installed roof cost, with no annual-probability multiplier. Apply the per-asset deductible and insured-value cap to obtain payout. The 300-year gust is estimated between 200 and 500 years on a log-return-period scale, then evaluated against the effective fragility curve.
+
+Event results include gross damage, insured payout, affected asset counts, per-asset/state tables, independent roof-option comparisons, and an asset-point map. Unaffected assets show zero losses; missing policy terms do not hide complete gross damage. Missing premium does not block event payout. Unknown states block state-scoped runs; missing coordinates only affect map placement. Incomplete totals are explicitly unavailable.
+
+Use **Saved event run** to reopen a simulation, or clear the selection to create a new one. Edited calculation inputs require another Run; stale results are hidden. Downloads contain the entire committed simulation and all roof alternatives, plus assumptions/provenance. This is a deterministic wind-roof stress test, not a storm track, portfolio loss return period, or regulatory certification. Existing building-loss/material proxies, the Tile/Metal proxy, age cap, and cost limitations remain in force. See [Insurance](insurance.md#event-stress-test) for formulas, scope, and limitations.
+
+**Annualized losses (unchanged):** choose Portfolio or one asset, a roof option, and a year. The dashboard shows insured value, annual premium, expected payout, underwriting margin, loss ratio, and break-even premium.
 
 The charts show annual premium/payout/margin, an all-option loss-ratio heatmap, and cumulative premiums and payouts. An individual complete policy also has a deductible/limit waterfall; portfolio mode shows the policy inventory. The year selector controls the summary values, while the time-series charts retain the full run horizon.
 
@@ -148,6 +170,7 @@ Working files live beneath `cadence_datalake/streamlit_sessions/<session_id>/`, 
 | Physical lifecycle | `roof_alternative_analysis/schema_version=v0.4.0/run_id=<id>/` | Annual state, damage, analysis, summary, HTML report, metadata; new runs also include the fragility-curve snapshot |
 | Linked economics reference | `roof_alternative_analysis/economics_reference/schema_version=v0.3.0/run_id=<id>/` | Annual option costs and metadata |
 | Insurance overlay | `roof_insurance_analysis/schema_version=v0.1.0/run_id=<id>/` | Policy snapshot, annual insurance, summary, metadata |
+| Insurance event stress test | `roof_insurance_event_analysis/schema_version=v0.1.0/run_id=<id>/` | Input snapshot, per-asset/state/portfolio results, 300-year curve snapshot when needed, settings/checksums/limitations |
 
 Retain linked products together. The insurance ID is separate from the physical ID and includes policy/workbook identities and a formula version. Reopening physical results does not synthesize missing policy snapshots. Published run files must not be manually overwritten to update assumptions.
 
@@ -157,7 +180,8 @@ Fragility snapshots are an additive extension of physical schema `v0.4.0`, with 
 
 | Code | Responsibility |
 |---|---|
-| [ui/app.py](../src/cadence/ui/app.py) | Three-page navigation and shared theme |
+| [streamlit_app.py](../streamlit_app.py) / [ui/app.py](../src/cadence/ui/app.py) | Native bootstrap, four-page navigation, and shared theme |
+| [program/](../src/cadence/program/) / [ui/program_page.py](../src/cadence/ui/program_page.py) | Single-home incentive calculations, immutable snapshots, and Program View |
 | [ui/pages/portfolio.py](../src/cadence/ui/pages/portfolio.py) | Portfolio filters, settings, and run controls |
 | [ui/pages/results.py](../src/cadence/ui/pages/results.py) | Physical result selection, tabs, and opportunity maps |
 | [ui/pages/insurance.py](../src/cadence/ui/pages/insurance.py) | Insurance selection, indicators, and views |
@@ -168,24 +192,66 @@ Fragility snapshots are an additive extension of physical schema `v0.4.0`, with 
 | [ui/insurance_data.py](../src/cadence/ui/insurance_data.py) and [ui/insurance_charts.py](../src/cadence/ui/insurance_charts.py) | Insurance artifact checks, aggregation, and charts |
 | [insurance/contracts.py](../src/cadence/insurance/contracts.py) | Direct policy-term normalization and availability flags |
 | [insurance/analysis.py](../src/cadence/insurance/analysis.py) and [insurance/pipeline.py](../src/cadence/insurance/pipeline.py) | Vectorized annual payout overlay and immutable publication |
+| [insurance/event_analysis.py](../src/cadence/insurance/event_analysis.py) and [insurance/event_pipeline.py](../src/cadence/insurance/event_pipeline.py) | Independent deterministic event losses and immutable event publication |
+| [ui/insurance_event_data.py](../src/cadence/ui/insurance_event_data.py) and [ui/insurance_event_page.py](../src/cadence/ui/insurance_event_page.py) | Verified event inputs, controls, maps, saved runs, and downloads |
 | [economics/contracts.py](../src/cadence/economics/contracts.py) and [economics/labor.py](../src/cadence/economics/labor.py) | Configurable horizon/rates and demand-surge wage calculation |
 
 ## Market Study Draft
 
-Market Study is available as an experimental tab in Alternative Analysis Results on the same dashboard server. Run Alternative Analysis from Asset Portfolio in the current browser session, keep the Portfolio selection, then open Market Study and choose Run Market Study. A separately selected historical run without its matching active input snapshot cannot initiate a study. The view displays a warning about unresolved calculation limitations; exposing it does not certify the draft model. Its source remains separate from the four-scenario lifecycle comparison:
+Market Study is available as an experimental tab in Alternative Analysis Results on the same dashboard server. Run Alternative Analysis from Asset Portfolio in the current browser session, keep the Portfolio selection, then open Market Study. A separately selected historical run without its matching active input snapshot cannot initiate a study.
+
+**Limit homeowner payback period** is off by default. Turn it on and enter a positive whole number in **Maximum acceptable payback (years)** (initially 10). Click **Run Market Study** to calculate or reopen that exact scenario. Editing a control does not automatically simulate or relabel old results. The optional limit applies to all homes; it is not capped at 10 years or one roof life.
+
+The model evaluates every home every year, even with the limit off:
+
+1. Compare keeping the roof until required EUL/damage replacement, followed by in-kind replacements, with installing each candidate material now and subsequently replacing it in kind when required. Same-material early renewal is included.
+2. Require positive incremental NPV (at cent precision) for an elective replacement. With the limit enabled, also require first discounted recovery of incremental cost on or before that number of years.
+3. Choose the largest eligible NPV; ties prefer the current material, then canonical Asphalt/Metal/Tile order. If nothing qualifies, keep a roof that is not due. A required EUL/damage replacement still occurs in kind.
+4. Apply only this year's selected action to actual stock/costs, then reassess next year. Hypothetical comparison-path spending is never added to portfolio costs.
+
+The original roof purchase is sunk and is not charged again. Remaining service is represented by the keep-roof comparison, not an extra book-value write-off. Long-term NPV includes the discounted **difference in terminal remaining roof values**, estimated using straight-line remaining life and terminal-year installed prices. Discounted payback excludes that imputed value and any unmodeled house-sale premium. Payback is a first crossing, not a guarantee that future replacement costs never make cumulative savings negative again; the separate NPV gate remains necessary.
+
+At a required replacement, the upfront comparison is the upgrade's extra cost over a new same-material roof. For elective replacement, it includes the full install-now bill versus keeping the existing roof. Zero-time recovery is possible if the upfront differential is already nonnegative. Otherwise, recovery is evaluated at annual boundaries, inclusively and at cent precision; unrecovered payback is unavailable, not zero.
+
+For each home, all candidates use the same rolling duration: the maximum of initial EUL (including overrides), new-material service lives, and the enabled payback limit. Opening installation/removal cash is discounted at the start of each year, operating costs at its end, and terminal value at the end of that duration. This versioned market convention does not change Alternative Analysis or Program View.
+
+**Look-ahead is not limited by the chart end.** Beyond the last verified saved parent year, hold real prices, enabled removal rates, and climate factors constant. Continue aging, age-dependent damage, and necessary replacements. The UI shows the actual saved-data cutoff and evaluation endpoint; a shorter parent can have a cutoff before 2050. These are explicit scenario extrapolations, not sourced future forecasts. The shared Alternative Analysis configuration remains limited to 2026-2050.
+
+Saved schema `v0.2.0` contains annual asset stock, roof shares, portfolio costs, annual accepted/rejected candidate decisions, itemized candidate cash-flow audits, verified input snapshots, and metadata/checksums. Large asset and audit tables are partitioned into Parquet datasets; aggregate charts remain small. Off, 5-year, and 10-year settings have different immutable identities. Legacy `v0.1.0` event-only results are never reused as current annual-decision results. Filter the audit by decision year and home and download the selected comparisons or home cash flows.
+
+Implementation remains separate from the four-scenario lifecycle comparison:
 
 - [economics/market_inputs.py](../src/cadence/economics/market_inputs.py) loads asset, hazard, service-life, and price inputs.
-- [economics/market_study.py](../src/cadence/economics/market_study.py) explores EUL/damage-triggered replacement, in-kind alternatives, discounted future costs, and straight-line terminal roof value.
-- [economics/market_pipeline.py](../src/cadence/economics/market_pipeline.py) contains draft study publication.
-- [ui/market_data.py](../src/cadence/ui/market_data.py) contains draft saved-study readers.
+- [economics/market_study.py](../src/cadence/economics/market_study.py) evaluates fixed paths with batched array calculations, annual NPV decisions, and discounted payback.
+- [economics/market_pipeline.py](../src/cadence/economics/market_pipeline.py) publishes scenario-specific results and provenance.
+- [ui/market_data.py](../src/cadence/ui/market_data.py) locates exact saved scenarios and reads filtered audits without simulation.
 
-Draft outputs use `roof_market_study/schema_version=v0.1.0/run_id=<id>/` with annual asset stock, roof shares, portfolio costs, replacement decisions, and metadata. They are deterministic roof-stock scenarios, not calibrated market-adoption predictions. Decision NPVs are relative to replacement in kind at a decision event, not the Alternative Summary baseline.
+Limitations:
 
-Review limitations still requiring work:
+- This is an enabled-study-cost economic acceptance proxy: full expected repairs, not costs net of insurance. Enabled carbon costs are included. Income, liquidity, finance, resale premiums, and actual homeowner adoption probabilities are not modeled.
+- Remaining-value depreciation, the retained damage-cost trigger, age-30 fragility cap, and temporary Tile proxy remain provisional.
+- Removal costs now use the actual removed material with verified reference sources. A source mismatch requires an Alternative Analysis rerun, rather than silently mixing assumptions.
+- Missing required data remains explicitly unavailable; affected stock is Unknown and dollar totals are unavailable. Enabled loss of use is rejected until validated annual inputs are connected.
+- Batched state/cash-flow calculations and cached risk lookups replace recursive optimization. Synthetic portfolio checks do not establish real-data production performance or calibrated adoption.
 
-- The draft removal lookup takes option-reference costs calculated for the originally installed roof and indexes them by replacement material. After a material switch, later disposal/carbon values and replacement triggers can therefore use the wrong removed material. Resolve costs for the active roof before relying on these projections.
-- The draft executes a recursive simulator once per asset and materializes per-asset pandas results. This does not meet the repository's vectorized production-execution requirement. Synthetic examples do not establish performance at 100-10,000 assets.
-- Validated annual loss-of-use inputs, calibrated depreciation/adoption assumptions, and completed publication/UI integration remain outstanding.
+Focused verification:
+
+```shell
+.venv/bin/python -m pytest tests/test_market_study.py tests/test_market_inputs.py tests/test_market_pipeline.py tests/test_ui_market.py
+```
+
+Synthetic batch measurements (25 displayed years, 30-year rolling evaluation,
+10-year acceptance, batches of 100, including in-memory Parquet serialization):
+
+| Homes | Wall seconds | Peak process memory (MiB) | Serialized output (MiB) | Candidate cash-flow rows |
+| --- | ---: | ---: | ---: | ---: |
+| 100 | 0.84 | 264 | 1.7 | 225,000 |
+| 1,000 | 6.61 | 281 | 16.9 | 2,250,000 |
+| 10,000 | 61.74 | 291 | 169.1 | 22,500,000 |
+
+Each size agreed with a single-home calculation for the sampled home. These
+measurements use synthetic cached-risk inputs and exclude real reference loading,
+source hashing, and disk I/O; they are not production end-to-end timings.
 
 ## Verification
 

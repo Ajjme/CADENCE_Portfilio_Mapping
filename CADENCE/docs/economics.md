@@ -17,9 +17,9 @@ The module currently answers four questions:
 3. What disposal, landfill-carbon, and expected loss-of-use costs are associated with the option?
 4. Given an annual expected damage ratio, what is the provisional repair estimate?
 
-This base cost pipeline does not calculate NPV, BCR, payback, incentives, insurance effects, adoption decisions, or year-to-year roof-state transitions. The separate [Alternative Analysis pipeline](../ALTERNATIVE_ANALYSIS_README.md) already calculates lifecycle state, burnout replacement, avoided damage, net benefit, and NPV. The [insurance overlay](insurance.md) calculates annual wind-roof payouts and underwriting indicators from those physical results.
+This base cost pipeline does not calculate NPV, BCR, payback, incentives, insurance effects, adoption decisions, or year-to-year roof-state transitions. The separate [Alternative Analysis pipeline](../ALTERNATIVE_ANALYSIS_README.md) already calculates lifecycle state, burnout replacement, avoided damage, net benefit, and NPV. The [insurance overlay](insurance.md) calculates annual wind-roof payouts and underwriting indicators from those physical results. [Program View](program.md) separately evaluates delayed installations and calculates single-home pre-insurance break-even grants and upfront gaps, without changing the existing Alternative Analysis defaults.
 
-See the [Streamlit Dashboard Guide](streamlit.md) for the portfolio controls, cost-allocation charts, opportunity maps, and supporting code. [Market Study](streamlit.md#market-study-draft) is unfinished draft work and must not be confused with the supported four-scenario lifecycle comparison.
+See the [Streamlit Dashboard Guide](streamlit.md) for portfolio controls, cost-allocation charts, opportunity maps, and supporting code. The separate experimental [Market Study](streamlit.md#market-study-draft) evaluates annual keep-versus-replace decisions with an optional discounted-payback acceptance limit. It is not the four-scenario lifecycle comparison or a calibrated adoption forecast; its rolling horizon, terminal-value treatment, and constant-price/climate extension are documented separately.
 
 ## Package Layout
 

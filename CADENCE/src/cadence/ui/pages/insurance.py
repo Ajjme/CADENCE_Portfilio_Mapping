@@ -28,7 +28,7 @@ from cadence.ui.theme import page_header, section_header
 
 def render() -> None:
     st.markdown(
-        page_header("CADENCE Insurance View", "Projected wind-roof underwriting · 2026–2050"),
+        page_header("CADENCE Insurance View", "Wind-roof event stress tests and annualized losses"),
         unsafe_allow_html=True,
     )
     runs = {row["run_id"]: row for row in discover_insurance_runs() if row.get("run_id")}
@@ -61,6 +61,14 @@ def render() -> None:
         return
     if policies.empty:
         st.warning("This insurance run contains no selected assets.")
+        return
+
+    mode = st.radio("Insurance mode", ["Event stress test", "Annualized losses"],
+                    horizontal=True, key="insurance_mode")
+    if mode == "Event stress test":
+        from cadence.ui.insurance_event_page import render_event
+
+        render_event(run_root, metadata)
         return
 
     labels = scenario_labels(None, portfolio=True)

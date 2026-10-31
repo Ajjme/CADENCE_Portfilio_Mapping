@@ -23,7 +23,7 @@ from cadence.ui.charts import (
     wind_return_period_figure,
 )
 from cadence.ui.components import render_summary_card
-from cadence.ui.market_data import find_study, load_study
+from cadence.ui.market_data import find_study, load_candidate_audit, load_decisions, load_study
 from cadence.ui.paths import ALTERNATIVE_RESULTS_ROOT
 from cadence.ui.results_data import (
     METRICS,
@@ -113,9 +113,9 @@ def render() -> None:
 
 def _render_market_study(run_root: str, selected_asset: str) -> None:
     st.warning(
-        "Experimental study: not a calibrated market forecast. Disposal/carbon costs "
-        "after material changes remain unverified; do not rely on these projections "
-        "for investment decisions."
+        "Experimental study: economic acceptance proxy, not a calibrated market forecast or "
+        "actual homeowner affordability assessment. Repair costs are pre-insurance; "
+        "enabled carbon costs are included. Do not rely on these projections for investment decisions."
     )
     if selected_asset != PORTFOLIO_OPTION:
         st.info("Select Portfolio to view the Market Study.")
@@ -125,36 +125,68 @@ def _render_market_study(run_root: str, selected_asset: str) -> None:
         st.info("Market Study requires the matching active session run and its saved asset inputs.")
         return
     st.markdown(section_header("Market Study"), unsafe_allow_html=True)
-    st.caption("Deterministic portfolio scenario · start-of-year replacements · projected roof stock, not calibrated market adoption")
+    st.caption("Every home is evaluated every year, even with the payback limit off. "
+               "Voluntary replacement requires positive incremental NPV; required EUL/damage replacement remains.")
+    enabled = st.toggle("Limit homeowner payback period", value=False, key=f"market_limit_{active['run_id']}")
+    entered_limit = st.number_input(
+        "Maximum acceptable payback (years)", min_value=1, value=10, step=1,
+        disabled=not enabled, key=f"market_payback_{active['run_id']}",
+        help="First discounted recovery of incremental cost. Remaining roof value affects NPV, not payback.",
+    )
+    limit = int(entered_limit) if enabled else None
     if st.button("Run Market Study", type="primary", key=f"run_market_study_{active['run_id']}"):
         with st.spinner("Evaluating annual roof replacement choices"):
             try:
-                result = run_market_study(run_root, active)
+                result = run_market_study(run_root, active, limit)
                 st.success(f"Study {result['run_id']} · {'cached' if result['cache_hit'] else 'complete'}")
-            except (ValueError, OSError, KeyError) as error:
+            except (ValueError, OSError, KeyError, PolarsError) as error:
                 st.error(f"Market Study unavailable: {error}")
                 return
     try:
-        study_root = find_study(run_root, active)
+        study_root = find_study(run_root, active, limit)
         if study_root is None:
-            st.info("Run the Market Study to publish annual roof-stock and cost results.")
+            st.info("Run the Market Study to calculate results for these exact settings. "
+                    "Changing the payback limit requires recalculation; older event-only studies are not reused.")
             return
-        manifest, stock, costs, decisions = load_study(study_root, run_root)
-    except (ValueError, OSError, KeyError) as error:
+        manifest, stock, costs = load_study(study_root, run_root)
+    except (ValueError, OSError, KeyError, PolarsError) as error:
         st.warning(f"Saved Market Study cannot be opened: {error}")
         return
     streams = ", ".join(sorted(manifest["run_config"]["enabled_cost_streams"]))
     st.caption(f"Run {manifest['run_id']} · {streams} · real 2026 USD"
                + (" · Tile uses provisional Metal proxy" if manifest.get("temporary_tile_policy") else ""))
+    st.caption(
+        f"Payback limit: {str(limit) + ' years' if limit is not None else 'off'} · "
+        f"Real discount rate: {manifest['run_config']['real_discount_rate']:.1%} · "
+        f"Policy: {manifest['policy_id']}. Rolling NPV horizon: longest relevant roof life "
+        "or the payback limit, whichever is longer. Terminal remaining value is included only in NPV."
+    )
+    st.info(
+        f"Beyond saved year {manifest['last_verified_year']}, real prices and climate factors are held "
+        f"constant through the required look-ahead (up to {manifest['evaluation_end_year']}). "
+        "Roof aging, age-dependent damage, and required replacements continue. These are extrapolated assumptions."
+    )
     if costs["unknown_count"].max():
         st.warning("Assets with incomplete required costs or damage are counted as Unknown. Affected dollar totals are unavailable.")
     st.plotly_chart(market_share_figure(stock), config={"displaylogo": False, "responsive": True})
     st.plotly_chart(market_cost_figure(costs), config={"displaylogo": False, "responsive": True})
-    with st.expander("Replacement decisions"):
-        if decisions.empty:
-            st.info("No roofs were replaced during the selected years.")
-        else:
-            st.dataframe(decisions, width="stretch", hide_index=True)
+    with st.expander("Annual replacement decisions and payback audit"):
+        year = st.selectbox("Decision year", sorted(stock["year"].unique()), key=f"market_year_{manifest['run_id']}")
+        try:
+            decisions = load_decisions(study_root, run_root, int(year))
+            home = st.selectbox("Home audit", [None, *sorted(decisions["asset_id"].unique())],
+                                format_func=lambda value: "All homes" if value is None else str(value),
+                                key=f"market_home_{manifest['run_id']}")
+            shown = decisions if home is None else decisions.loc[decisions["asset_id"] == home]
+            st.dataframe(shown, width="stretch", hide_index=True)
+            st.download_button("Download selected decisions", shown.to_csv(index=False),
+                               file_name=f"market_decisions_{year}.csv", mime="text/csv")
+            if home is not None:
+                audit = load_candidate_audit(study_root, run_root, int(year), str(home))
+                st.download_button("Download home candidate cash flows", audit.to_csv(index=False),
+                                   file_name=f"market_cash_flows_{year}.csv", mime="text/csv")
+        except (ValueError, OSError, KeyError) as error:
+            st.error(f"Market decision audit unavailable: {error}")
 
 
 def _select_run() -> str | None:

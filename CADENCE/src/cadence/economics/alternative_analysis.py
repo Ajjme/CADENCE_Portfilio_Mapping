@@ -44,8 +44,44 @@ def build_annual_scenario_state(
     assets: pl.DataFrame,
     service_lives: pl.DataFrame,
     config: EconomicsRunConfig,
+    *,
+    installation_year: Optional[int] = None,
 ) -> pl.DataFrame:
     """Build four independently aging roof scenarios for each asset and year."""
+    if installation_year is not None:
+        if isinstance(installation_year, bool) or not isinstance(installation_year, int):
+            raise ValueError("installation_year must be an integer")
+        if not config.start_year <= installation_year <= config.end_year:
+            raise ValueError("installation_year must be within the study horizon")
+        if installation_year > config.start_year:
+            original = build_annual_scenario_state(assets, service_lives, config)
+            baseline = original.filter(pl.col("scenario_id") == "BASELINE_CURRENT")
+            before = baseline.filter(pl.col("year") < installation_year)
+            sequences = before.group_by("asset_id").agg(
+                pl.col("install_sequence").max().alias("prior_install_sequence")
+            )
+            later = build_annual_scenario_state(
+                assets, service_lives,
+                config.model_copy(update={"start_year": installation_year}),
+            ).filter(pl.col("scenario_role") == "new_alternative").join(
+                sequences, on="asset_id", validate="m:1",
+            ).with_columns(
+                (pl.col("install_sequence") + pl.col("prior_install_sequence"))
+                .alias("install_sequence"),
+            ).drop("prior_install_sequence")
+            prefixes = [
+                before.with_columns(
+                    pl.lit(scenario.value).alias("scenario_id"),
+                    pl.lit("new_alternative").alias("scenario_role"),
+                    pl.lit(material).alias("alternative_material_id"),
+                )
+                for scenario, material in zip(
+                    list(AlternativeScenario)[1:], OFFICIAL_MATERIAL_CLASSES,
+                )
+            ]
+            return pl.concat([baseline, *prefixes, later], how="vertical").sort(
+                ["asset_id", "year", "scenario_id"]
+            )
     _require_columns(assets, LIFECYCLE_ASSET_COLUMNS, "assets")
     _require_columns(
         service_lives,

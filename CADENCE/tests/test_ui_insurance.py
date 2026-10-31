@@ -25,12 +25,12 @@ def test_dashboard_registers_all_pages(monkeypatch):
 
     monkeypatch.setattr(st, "navigation", capture_navigation)
     monkeypatch.setattr(portfolio, "render", lambda: st.write("Portfolio"))
-    app_path = Path(insurance.__file__).parents[1] / "app.py"
+    app_path = Path(__file__).parents[1] / "streamlit_app.py"
     app = AppTest.from_file(str(app_path)).run()
 
     assert not app.exception
     assert page_titles == [
-        "Asset Portfolio", "Alternative Analysis Results", "Insurance View",
+        "Asset Portfolio", "Alternative Analysis Results", "Insurance View", "Program View",
     ]
 
 
@@ -126,6 +126,9 @@ def test_insurance_view_renders_asset_and_portfolio(monkeypatch):
     app = AppTest.from_function(_insurance_page).run()
     assert not app.exception
     app.selectbox[0].set_value("insurance").run()
+    assert not app.exception
+    assert app.radio[0].value == "Event stress test"
+    app.radio[0].set_value("Annualized losses").run()
     assert not app.exception
     assert len(app.selectbox) == 4
     assert any("Underwriting margin" in item.value for item in app.markdown)
