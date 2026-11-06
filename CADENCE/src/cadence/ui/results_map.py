@@ -24,14 +24,13 @@ BASE_TILES = (
 
 
 @st.cache_data(show_spinner=False)
-def load_map_boundaries(region: str, identifiers: tuple[str, ...]) -> gpd.GeoDataFrame:
+def load_map_boundaries(region: str, identifiers: tuple[str, ...], bounds: tuple[float, ...]) -> gpd.GeoDataFrame:
     """Return only the selected 2020 ZCTAs or counties/states in WGS84."""
     if region not in MAP_REGIONS:
         raise ValueError("unsupported region")
     if region == "ZIP / ZCTA":
         source = f"zip://{ZCTA_PATH.resolve()}"
-        # Read only the mapped ZIPs by attribute, not every ZCTA in a bounding box.
-        shapes = gpd.read_file(source, where=zcta_filter(identifiers))[["ZCTA5CE20", "geometry"]]
+        shapes = gpd.read_file(source, bbox=bounds)[["ZCTA5CE20", "geometry"]]
         shapes["region_id"] = shapes["ZCTA5CE20"].astype(str).str.zfill(5)
     else:
         shapes = gpd.read_file(CLIMATE_ZONES)[["GEOID", "geometry"]]
@@ -50,16 +49,6 @@ def load_map_boundaries(region: str, identifiers: tuple[str, ...]) -> gpd.GeoDat
     shapes = shapes.to_crs("EPSG:4326")
     shapes["geometry"] = shapes.geometry.simplify(0.002 if region == "ZIP / ZCTA" else 0.005, preserve_topology=True)
     return shapes
-
-
-def zcta_filter(identifiers: tuple[str, ...]) -> str:
-    """Build an attribute filter that selects only the given 5-digit ZCTAs."""
-    zips = sorted({str(value).zfill(5) for value in identifiers})
-    if not zips:
-        raise ValueError("no ZIP codes to map")
-    if not all(len(value) == 5 and value.isdigit() for value in zips):
-        raise ValueError("ZIP identifiers must be 5 digits")
-    return "ZCTA5CE20 IN ({})".format(", ".join(f"'{value}'" for value in zips))
 
 
 def render_results_map(
