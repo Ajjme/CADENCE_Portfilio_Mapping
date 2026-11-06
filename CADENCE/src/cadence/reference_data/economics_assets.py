@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 import tempfile
 import zipfile
 from datetime import datetime, timezone
@@ -13,9 +14,14 @@ import geopandas as gpd
 import pandas as pd
 import polars as pl
 from openpyxl import load_workbook
+from shapely.geometry import box
 
 ECONOMICS_ASSET_SCHEMA_VERSION = "v0.1.0"
 MAX_NEAREST_GEOGRAPHY_DISTANCE_M = 50_000.0
+# Search boxes reach past the 50 km limit because that limit is measured in
+# EPSG:5070, which stretches distances away from the continental US.
+SEARCH_BOX_MARGIN = 1.5
+EARTH_RADIUS_M = 6_371_008.8
 GEOGRAPHY_DISTANCE_CRS = "EPSG:5070"
 WORKBOOK_COLUMNS = (
     "asset_id",
@@ -151,9 +157,12 @@ def attach_economics_geography(
         geometry=gpd.points_from_xy(assets["longitude"], assets["latitude"]),
         crs="EPSG:4326",
     )
-    bounds = tuple(points.total_bounds)
+    search_area = gpd.GeoSeries(
+        [box(*bounds) for bounds in asset_search_boxes(assets["latitude"], assets["longitude"])],
+        crs="EPSG:4326",
+    )
     zcta_source = f"zip://{zcta_path.resolve()}" if zcta_path.suffix == ".zip" else zcta_path
-    zctas = gpd.read_file(zcta_source, bbox=bounds)[["ZCTA5CE20", "geometry"]]
+    zctas = gpd.read_file(zcta_source, mask=search_area)[["ZCTA5CE20", "geometry"]]
     zctas = zctas.to_crs("EPSG:4326").rename(columns={"ZCTA5CE20": "zip_code"})
     point_zcta = _assign_polygon_geography(
         points,
@@ -214,6 +223,31 @@ def attach_economics_geography(
     return assets.join(result, on="asset_id", how="left", validate="1:1").sort(
         "asset_id"
     )
+
+
+def asset_search_boxes(
+    latitudes: Iterable[float],
+    longitudes: Iterable[float],
+    radius_m: float = MAX_NEAREST_GEOGRAPHY_DISTANCE_M * SEARCH_BOX_MARGIN,
+) -> list:
+    """Return a (west, south, east, north) box in degrees around each unique point.
+
+    Reading only these boxes keeps the ZCTA read small when assets are far apart,
+    where one box around every asset would load most of the country. Each box
+    reaches past the nearest-match limit, so the bounded nearest fallback still
+    sees every polygon it could choose.
+    """
+    half_height = math.degrees(radius_m / EARTH_RADIUS_M)
+    boxes = []
+    for latitude, longitude in sorted(set(zip(latitudes, longitudes))):
+        half_width = half_height / max(math.cos(math.radians(latitude)), 0.01)
+        boxes.append((
+            max(longitude - half_width, -180.0),
+            max(latitude - half_height, -90.0),
+            min(longitude + half_width, 180.0),
+            min(latitude + half_height, 90.0),
+        ))
+    return boxes
 
 
 def _assign_polygon_geography(

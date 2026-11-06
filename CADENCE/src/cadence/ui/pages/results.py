@@ -283,8 +283,7 @@ def _render_portfolio_maps(run_root: str, summary: pd.DataFrame) -> None:
                     missing_ids = int(rows[MAP_REGIONS[region]].isna().sum())
                     if missing_ids:
                         st.warning(f"{missing_ids:,} assets have no {region} identifier.")
-                    bounds = (float(rows.longitude.min()), float(rows.latitude.min()), float(rows.longitude.max()), float(rows.latitude.max()))
-                    boundaries = load_map_boundaries(region, tuple(regions[MAP_REGIONS[region]].astype(str)), bounds)
+                    boundaries = load_map_boundaries(region, tuple(regions[MAP_REGIONS[region]].astype(str)))
                     values = regions["value"]
                 domain = float(values.abs().max()) if values.notna().any() else 1.0
                 render_results_map(rows, metric, label, prefix, domain, regions, boundaries, region)
