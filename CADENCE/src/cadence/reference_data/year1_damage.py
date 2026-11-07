@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -19,7 +20,7 @@ from cadence.reference_data.fragility import (
     TERRAIN_LABELS,
     load_terrain_averaged_curve,
 )
-from cadence.reference_data.precomputed import WIND_FILE, precomputed_file
+from cadence.reference_data.precomputed import FRAGILITY_FILE, WIND_FILE, precomputed_file
 from cadence.vulnerability.expected_damage import (
     MPS_TO_MPH,
     RETURN_PERIODS,
@@ -373,6 +374,16 @@ def _cache_key(assets: pl.DataFrame, fragility_identity: str = "unversioned") ->
 
 
 def _fragility_identity(assets: pl.DataFrame, fragility_root: Path) -> str:
+    """A hash that changes whenever the fragility curves behind a run change.
+
+    With Data/Precomputed/fragility_curves.parquet in place, every curve comes
+    from that file, so the hash is of its contents. Otherwise it covers the raw
+    partition files the assets use.
+    """
+    precomputed = precomputed_file(fragility_root.resolve().parents[1], FRAGILITY_FILE)
+    if precomputed is not None:
+        stat = precomputed.stat()
+        return _precomputed_fragility_identity(str(precomputed.resolve()), stat.st_size, stat.st_mtime_ns)
     selected_partitions = assets.select("climate_zone", "lookup_roof_age").unique().sort(
         "climate_zone", "lookup_roof_age"
     )
@@ -398,6 +409,16 @@ def _fragility_identity(assets: pl.DataFrame, fragility_root: Path) -> str:
     return hashlib.sha256(
         json.dumps(files, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+
+
+@lru_cache(maxsize=4)
+def _precomputed_fragility_identity(path: str, size: int, mtime_ns: int) -> str:
+    # size and mtime_ns are only cache keys, so a rebuilt file is hashed again.
+    digest = hashlib.sha256(b"precomputed fragility curves\n")
+    with open(path, "rb") as source:
+        for block in iter(lambda: source.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _asset_run_key(assets: pl.DataFrame) -> str:
