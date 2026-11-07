@@ -21,6 +21,7 @@ from cadence.reference_data.fragility import load_terrain_averaged_curve
 from cadence.reference_data.precomputed import FRAGILITY_FILE, WIND_FILE
 from cadence.reference_data.year1_damage import (
     GUST_COLUMNS,
+    _fragility_identity,
     attach_nearest_wind_grid,
     wind_grid_source,
 )
@@ -424,3 +425,20 @@ def test_map_draws_the_same_shapes_from_the_precomputed_file(tmp_path: Path, mon
     assert sorted(compact.index) == sorted(raw.index) == sorted(zips)
     for zip_code in zips:
         assert compact.geometry[zip_code].equals_exact(raw.geometry[zip_code], tolerance=1e-12)
+
+
+def test_fragility_identity_comes_from_the_precomputed_file_once_it_exists(tmp_path: Path) -> None:
+    cadence_root, sources, output_root = _precomputed_layout(tmp_path)
+    keys = pl.DataFrame({"climate_zone": ["3A"], "lookup_roof_age": [5]})
+
+    raw_identity = _fragility_identity(keys, sources["fragility"])
+    precompute.run(["fragility"], cadence_root, output_root)
+    shutil.rmtree(sources["fragility"])
+    first = _fragility_identity(keys, sources["fragility"])
+    curves_path = output_root / FRAGILITY_FILE
+    pl.read_parquet(curves_path).with_columns(pl.col("building_loss_ratio") * 0.5).write_parquet(curves_path)
+    changed = _fragility_identity(keys, sources["fragility"])
+
+    assert len(first) == len(raw_identity) == 64
+    assert first != raw_identity
+    assert changed != first

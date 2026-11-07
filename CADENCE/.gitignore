@@ -30,10 +30,6 @@ Data/Climate_Zones/*
 !Data/Climate_Zones/ClimateZones.shp
 !Data/Climate_Zones/ClimateZones.shx
 !Data/Disposal/EREF_2024_Tipping_Fees_Parsed.csv
-!Data/Fragility_Curves/iecc2021/**/*.parquet
-!Data/Geography/Census_TIGER/raw/v2020/tl_2020_us_zcta520.zip
-!Data/Geography/IPUMS_NHGIS/raw/v2020/nhgis_blk2010_cbsa2020.zip
-!Data/Geography/IPUMS_NHGIS/raw/v2020/nhgis_blk2010_zcta2020/nhgis_blk2010_zcta2020.csv
 !Data/Labor/Escalation/labor_wage_projections_2026_2050.parquet
 !Data/Labor/Productivity/roof_labor_productivity_parameters.csv
 !Data/Labor/Start_Year_2026/labor_geographies.parquet
@@ -48,7 +44,6 @@ Data/Climate_Zones/*
 !Data/Materials/Start_Year_2026/home_depot_material_price_national.csv
 !Data/User_Inputs/asset_inventory_test_1.xlsx
 !Data/User_Inputs/economics_config_test_1.json
-!Data/Wind_Return_Periods/gev_return_periods.csv
 !Data_Catalogs/Mapping/*.csv
 !Data_Catalogs/Climate_data_catalog.xlsx
 !Data_Catalogs/Economic_data_catalog.xlsx

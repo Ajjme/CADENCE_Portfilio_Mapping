@@ -127,6 +127,8 @@ In other words, the Vulnerability module is the process of taking and combining:
 - `Data/Fragility_Curves/` for the HAZUS-based damage curves
 - `Data/Climate_Delta/` for annual wind-speed scaling in the alternative-analysis pipeline
 
+The app reads small precomputed versions of the wind grid, ZIP geography, and fragility curves from `Data/Precomputed/`. The raw files they come from are kept at the `raw-data-v1` tag, not on `main`. See `Data/Precomputed/README.md` for how to restore them and rebuild.
+
 This is the material component of the platform for the current code path: project damage at the user-supplied locations for Asphalt, Metal, and Tile roofs.
 
 ## Data Mapping Status

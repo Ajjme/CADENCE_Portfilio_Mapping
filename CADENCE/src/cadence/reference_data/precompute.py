@@ -74,6 +74,7 @@ DEFAULT_LOOKUP_SIMPLIFY_DEGREES = 0.0001
 ZCTA_ID_COLUMN = "ZCTA5CE20"
 ZCTA_READ_CHUNK = 5_000
 ROOF_AGES = tuple(range(1, 31))
+RESTORE_HELP = "see Data/Precomputed/README.md"
 FRAGILITY_FILES = ("curves_hu.parquet", "curve_points_hu.parquet", "curve_attributes_hu.parquet")
 
 
@@ -209,7 +210,7 @@ def build_fragility(fragility_root: Path, output: Path) -> Dict[str, object]:
                 _require_downloaded(path)
             frames.append(_partition_curves(partition, climate_zone, roof_age))
     if not frames:
-        raise FileNotFoundError(f"no fragility partitions found under {fragility_root}")
+        raise FileNotFoundError(f"no fragility partitions found under {fragility_root} - {RESTORE_HELP}")
     curves = pl.concat(frames).sort([*CURVE_KEYS, "wind_speed_mph"])
     _validate_curves(curves)
     expected = {
@@ -388,7 +389,7 @@ def _write_geoparquet(frame: gpd.GeoDataFrame, output: Path) -> None:
 
 def _require_downloaded(path: Path) -> None:
     if not path.is_file():
-        raise FileNotFoundError(f"{path} is missing - run `git lfs pull` from the repository root")
+        raise FileNotFoundError(f"{path} is missing - restore the raw files first ({RESTORE_HELP})")
     with path.open("rb") as source:
         if source.read(len(LFS_POINTER_PREFIX)) == LFS_POINTER_PREFIX:
             raise FileNotFoundError(
