@@ -35,6 +35,7 @@ cadence-calculate-roof-economics = "cadence.economics.cli:main"
 cadence-run-alternative-analysis = "cadence.economics.alternative_cli:main"
 cadence-build-economics-assets = "cadence.reference_data.economics_assets_cli:main"
 cadence-expand-material-prices = "cadence.reference_data.material_price_expansion:main"
+cadence-precompute-reference-data = "cadence.reference_data.precompute:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

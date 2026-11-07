@@ -324,7 +324,35 @@ def build_selected_zcta_crosswalk(
     selected = sorted(set(zip_codes))
     if not selected:
         raise ValueError("at least one ZIP code is required")
-    sql_values = ", ".join(f"'{_sql_literal(value)}'" for value in selected)
+    result = _zcta_crosswalk(zcta_crosswalk_path, cbsa_crosswalk_zip_path, selected)
+    missing = sorted(set(selected) - set(result["zip_code"].to_list()))
+    if missing:
+        raise ValueError("NHGIS crosswalk is missing ZCTAs: " + ", ".join(missing))
+    return result
+
+
+def build_full_zcta_crosswalk(
+    zcta_crosswalk_path: Path,
+    cbsa_crosswalk_zip_path: Path,
+) -> pl.DataFrame:
+    """Resolve dominant county and CBSA for every ZCTA in the NHGIS crosswalk.
+
+    Uses the same query as build_selected_zcta_crosswalk, so a ZIP gets the
+    same county and CBSA whether it is looked up alone or precomputed.
+    """
+    return _zcta_crosswalk(zcta_crosswalk_path, cbsa_crosswalk_zip_path, None)
+
+
+def _zcta_crosswalk(
+    zcta_crosswalk_path: Path,
+    cbsa_crosswalk_zip_path: Path,
+    selected: Optional[Sequence[str]],
+) -> pl.DataFrame:
+    # Blocks outside every ZCTA (mostly water) have no zcta2020ge.
+    zip_filter = "WHERE NULLIF(TRIM(zcta2020ge), '') IS NOT NULL"
+    if selected is not None:
+        sql_values = ", ".join(f"'{_sql_literal(value)}'" for value in selected)
+        zip_filter = f"WHERE LPAD(CAST(zcta2020ge AS VARCHAR), 5, '0') IN ({sql_values})"
     with tempfile.TemporaryDirectory(prefix="cadence-cbsa-") as temporary:
         with zipfile.ZipFile(cbsa_crosswalk_zip_path) as archive:
             members = [name for name in archive.namelist() if name.endswith(".csv")]
@@ -342,7 +370,7 @@ def build_selected_zcta_crosswalk(
                     header=true,
                     all_varchar=true
                 )
-                WHERE LPAD(CAST(zcta2020ge AS VARCHAR), 5, '0') IN ({sql_values})
+                {zip_filter}
             ),
             county_scores AS (
                 SELECT zip_code, SUBSTR(blk2010ge, 1, 5) AS county_fips,
@@ -397,11 +425,7 @@ def build_selected_zcta_crosswalk(
             LEFT JOIN cbsa USING (zip_code)
             ORDER BY county.zip_code
         """
-        result = duckdb.sql(query).pl()
-    missing = sorted(set(selected) - set(result["zip_code"].to_list()))
-    if missing:
-        raise ValueError("NHGIS crosswalk is missing ZCTAs: " + ", ".join(missing))
-    return result
+        return duckdb.sql(query).pl()
 
 
 def build_economics_asset_features(

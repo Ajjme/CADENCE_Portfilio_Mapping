@@ -4,3 +4,4 @@ CADENCE/Data/Geography/Census_TIGER/raw/v2020/tl_2020_us_zcta520.zip filter=lfs 
 CADENCE/Data/Geography/IPUMS_NHGIS/raw/v2020/nhgis_blk2010_cbsa2020.zip filter=lfs diff=lfs merge=lfs -text
 CADENCE/Data/Geography/IPUMS_NHGIS/raw/v2020/nhgis_blk2010_zcta2020/nhgis_blk2010_zcta2020.csv filter=lfs diff=lfs merge=lfs -text
 CADENCE/Data/Wind_Return_Periods/gev_return_periods.csv filter=lfs diff=lfs merge=lfs -text
+CADENCE/Data/Precomputed/*.parquet filter=lfs diff=lfs merge=lfs -text
