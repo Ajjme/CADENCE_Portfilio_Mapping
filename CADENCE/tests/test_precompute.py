@@ -1,4 +1,5 @@
 import json
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -11,11 +12,18 @@ from shapely.geometry import Polygon
 import cadence.reference_data.precompute as precompute
 import cadence.ui.results_map as results_map
 from cadence.reference_data.economics_assets import (
+    _select_precomputed_crosswalk,
+    attach_economics_geography,
     build_full_zcta_crosswalk,
     build_selected_zcta_crosswalk,
 )
 from cadence.reference_data.fragility import load_terrain_averaged_curve
-from cadence.reference_data.year1_damage import GUST_COLUMNS
+from cadence.reference_data.precomputed import FRAGILITY_FILE, WIND_FILE
+from cadence.reference_data.year1_damage import (
+    GUST_COLUMNS,
+    attach_nearest_wind_grid,
+    wind_grid_source,
+)
 
 ZCTA_SQUARES = {
     "27701": (-79.0, 35.0),
@@ -211,6 +219,7 @@ def test_map_boundaries_match_what_the_app_draws(tmp_path: Path, monkeypatch) ->
     details = precompute.build_zip_boundaries(archive, lookup_path, map_path)
     drawn = gpd.read_parquet(map_path).set_index("ZCTA5CE20")
     monkeypatch.setattr(results_map, "ZCTA_PATH", archive)
+    monkeypatch.setattr(results_map, "PRECOMPUTED_ZCTA_MAP_PATH", tmp_path / "not_built.parquet")
     results_map.load_map_boundaries.clear()
     app = results_map.load_map_boundaries("ZIP / ZCTA", tuple(ZCTA_SQUARES)).set_index("region_id")
 
@@ -304,3 +313,114 @@ def test_run_builds_everything_and_keeps_earlier_steps_in_the_manifest(tmp_path:
     assert manifest["outputs"]["zip_lookup"]["rows"] == 3
     assert manifest["outputs"]["zip_boundaries"]["rows"] == len(ZCTA_SQUARES)
     assert manifest["outputs"]["fragility"]["curves"] == 6
+
+
+# The pipeline readers give the same answers from the precomputed files as from the raw ones.
+
+
+def _precomputed_layout(tmp_path: Path) -> tuple:
+    cadence_root = tmp_path / "CADENCE"
+    sources = _write_all_sources(cadence_root)
+    return cadence_root, sources, cadence_root / "Data" / "Precomputed"
+
+
+def test_wind_attachment_is_the_same_from_the_precomputed_file(tmp_path: Path) -> None:
+    cadence_root, sources, output_root = _precomputed_layout(tmp_path)
+    assets = pl.DataFrame(
+        {"asset_id": ["A", "B"], "latitude": [35.01, 35.07], "longitude": [-78.99, -78.96]}
+    )
+
+    raw = attach_nearest_wind_grid(assets, sources["wind"])
+    precompute.run(["wind"], cadence_root, output_root)
+    compact = attach_nearest_wind_grid(assets, sources["wind"])
+
+    assert wind_grid_source(sources["wind"]).endswith(WIND_FILE)
+    assert compact.schema == raw.schema
+    assert compact["wind_grid_id"].to_list() == raw["wind_grid_id"].to_list()
+    assert compact["wind_grid_distance_km"].to_list() == raw["wind_grid_distance_km"].to_list()
+    for column in GUST_COLUMNS:
+        assert compact[column].to_list() == pytest.approx(raw[column].to_list(), rel=1e-6)
+
+
+def test_ignores_a_precomputed_file_that_is_only_a_git_lfs_pointer(tmp_path: Path) -> None:
+    _, sources, output_root = _precomputed_layout(tmp_path)
+    output_root.mkdir(parents=True)
+    (output_root / WIND_FILE).write_text("version https://git-lfs.github.com/spec/v1\n", encoding="utf-8")
+    assets = pl.DataFrame({"asset_id": ["A"], "latitude": [35.01], "longitude": [-78.99]})
+
+    assert wind_grid_source(sources["wind"]) == str(sources["wind"].resolve())
+    assert attach_nearest_wind_grid(assets, sources["wind"]).height == 1
+
+
+def test_fragility_reads_precomputed_curves_without_the_raw_partition(tmp_path: Path) -> None:
+    cadence_root, sources, output_root = _precomputed_layout(tmp_path)
+    key = ("3A", 5, "OFFICIAL_ASPHALT", 1)
+
+    raw = load_terrain_averaged_curve(sources["fragility"], *key)
+    precompute.run(["fragility"], cadence_root, output_root)
+    shutil.rmtree(sources["fragility"] / "3A" / "age_05")
+    compact = load_terrain_averaged_curve(sources["fragility"], *key)
+
+    assert compact["wind_speed_mph"].to_list() == raw["wind_speed_mph"].to_list()
+    assert compact["building_loss_ratio"].to_list() == pytest.approx(raw["building_loss_ratio"].to_list(), rel=1e-12)
+    assert compact["source_curve_count"].to_list() == raw["source_curve_count"].to_list()
+
+
+def test_fragility_falls_back_to_raw_for_a_curve_missing_from_the_precomputed_file(tmp_path: Path) -> None:
+    cadence_root, sources, output_root = _precomputed_layout(tmp_path)
+    precompute.run(["fragility"], cadence_root, output_root)
+    curves_path = output_root / FRAGILITY_FILE
+    pl.read_parquet(curves_path).filter(pl.col("source_material_id") != "OFFICIAL_METAL").write_parquet(curves_path)
+
+    curve = load_terrain_averaged_curve(sources["fragility"], "3A", 6, "OFFICIAL_METAL", 2)
+
+    assert curve["wind_speed_mph"].to_list() == [60.0, 120.0]
+    assert curve["building_loss_ratio"].to_list() == pytest.approx([0.06, 0.61])
+
+
+def test_economics_geography_is_the_same_from_precomputed_files(tmp_path: Path) -> None:
+    _, sources, output_root = _precomputed_layout(tmp_path)
+    assets = pl.DataFrame(
+        {"asset_id": ["A-1", "B-1"], "latitude": [35.05, 35.02], "longitude": [-78.95, -78.75]}
+    )
+    labor_area = Polygon([(-79.1, 34.9), (-78.6, 34.9), (-78.6, 35.2), (-79.1, 35.2)])
+    labor = tmp_path / "labor.parquet"
+    gpd.GeoDataFrame({"AREA": ["0020500"]}, geometry=[labor_area], crs="EPSG:4267").to_parquet(labor)
+    wages = tmp_path / "wages.parquet"
+    pl.DataFrame({"AREA": ["0020500"]}).write_parquet(wages)
+    raw_inputs = (sources["zcta"], sources["zcta_crosswalk"], sources["cbsa_crosswalk"], labor, wages)
+
+    raw = attach_economics_geography(assets, *raw_inputs)
+    lookup = output_root / precompute.OUTPUT_FILES["zip_lookup"]
+    boundaries = output_root / precompute.OUTPUT_FILES["zip_boundaries_lookup"]
+    precompute.build_zip_lookup(sources["zcta_crosswalk"], sources["cbsa_crosswalk"], lookup)
+    precompute.build_zip_boundaries(sources["zcta"], boundaries, output_root / "map.parquet")
+    compact = attach_economics_geography(
+        assets, *raw_inputs, precomputed_zcta_path=boundaries, precomputed_crosswalk_path=lookup
+    )
+
+    assert compact["zip_code"].to_list() == ["27701", "27705"]
+    assert compact.to_dicts() == raw.to_dicts()
+    with pytest.raises(ValueError, match="missing ZCTAs"):
+        _select_precomputed_crosswalk(lookup, ["99999"])
+
+
+def test_map_draws_the_same_shapes_from_the_precomputed_file(tmp_path: Path, monkeypatch) -> None:
+    archive = tmp_path / "tl_2020_us_zcta520.zip"
+    _write_zcta_zip(archive)
+    map_path = tmp_path / "map.parquet"
+    precompute.build_zip_boundaries(archive, tmp_path / "lookup.parquet", map_path)
+    zips = ("27701", "90210")
+
+    monkeypatch.setattr(results_map, "ZCTA_PATH", archive)
+    monkeypatch.setattr(results_map, "PRECOMPUTED_ZCTA_MAP_PATH", tmp_path / "not_built.parquet")
+    results_map.load_map_boundaries.clear()
+    raw = results_map.load_map_boundaries("ZIP / ZCTA", zips).set_index("region_id")
+    monkeypatch.setattr(results_map, "ZCTA_PATH", tmp_path / "gone.zip")
+    monkeypatch.setattr(results_map, "PRECOMPUTED_ZCTA_MAP_PATH", map_path)
+    results_map.load_map_boundaries.clear()
+    compact = results_map.load_map_boundaries("ZIP / ZCTA", zips).set_index("region_id")
+
+    assert sorted(compact.index) == sorted(raw.index) == sorted(zips)
+    for zip_code in zips:
+        assert compact.geometry[zip_code].equals_exact(raw.geometry[zip_code], tolerance=1e-12)

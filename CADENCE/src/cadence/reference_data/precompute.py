@@ -45,18 +45,27 @@ from cadence.reference_data.fragility import (
     TERRAIN_LABELS,
 )
 from cadence.reference_data.year1_damage import GUST_COLUMNS, VALID_CLIMATE_ZONES
+from cadence.reference_data.precomputed import (
+    FRAGILITY_FILE,
+    LFS_POINTER_PREFIX,
+    WIND_FILE,
+    ZIP_BOUNDARIES_LOOKUP_FILE,
+    ZIP_BOUNDARIES_MAP_FILE,
+    ZIP_LOOKUP_FILE,
+    precomputed_root,
+)
 from cadence.ui.paths import CADENCE_ROOT
 
 PRECOMPUTE_VERSION = "v1"
 STEPS = ("wind", "zip_lookup", "zip_boundaries", "fragility")
 OUTPUT_FILES = {
-    "wind": "wind_return_periods.parquet",
-    "zip_lookup": "zcta_county_cbsa.parquet",
-    "zip_boundaries_lookup": "zcta_boundaries_lookup.parquet",
-    "zip_boundaries_map": "zcta_boundaries_map.parquet",
-    "fragility": "fragility_curves.parquet",
+    "wind": WIND_FILE,
+    "zip_lookup": ZIP_LOOKUP_FILE,
+    "zip_boundaries_lookup": ZIP_BOUNDARIES_LOOKUP_FILE,
+    "zip_boundaries_map": ZIP_BOUNDARIES_MAP_FILE,
+    "fragility": FRAGILITY_FILE,
 }
-DEFAULT_OUTPUT_ROOT = CADENCE_ROOT / "Data" / "Precomputed"
+DEFAULT_OUTPUT_ROOT = precomputed_root(CADENCE_ROOT / "Data")
 WIND_SOURCE_COLUMNS = ("lat_idx", "lon_idx", "latitude", "longitude", *GUST_COLUMNS, "converged")
 # results_map.load_map_boundaries simplifies ZCTAs by this much before drawing them.
 MAP_SIMPLIFY_DEGREES = 0.002
@@ -66,7 +75,6 @@ ZCTA_ID_COLUMN = "ZCTA5CE20"
 ZCTA_READ_CHUNK = 5_000
 ROOF_AGES = tuple(range(1, 31))
 FRAGILITY_FILES = ("curves_hu.parquet", "curve_points_hu.parquet", "curve_attributes_hu.parquet")
-LFS_POINTER_PREFIX = b"version https://git-lfs"
 
 
 def source_paths(cadence_root: Path = CADENCE_ROOT) -> Dict[str, Path]:

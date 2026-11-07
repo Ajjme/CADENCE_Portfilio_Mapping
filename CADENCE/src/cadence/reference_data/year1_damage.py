@@ -19,6 +19,7 @@ from cadence.reference_data.fragility import (
     TERRAIN_LABELS,
     load_terrain_averaged_curve,
 )
+from cadence.reference_data.precomputed import WIND_FILE, precomputed_file
 from cadence.vulnerability.expected_damage import (
     MPS_TO_MPH,
     RETURN_PERIODS,
@@ -111,10 +112,7 @@ def read_asset_workbook(path: Path, sheet_name: str = "Sheet1") -> pl.DataFrame:
 
 def attach_nearest_wind_grid(assets: pl.DataFrame, wind_csv_path: Path) -> pl.DataFrame:
     """Attach the nearest CONUS404 center and six gust return levels to each asset."""
-    wind = pl.read_csv(
-        wind_csv_path,
-        columns=["lat_idx", "lon_idx", "latitude", "longitude", *GUST_COLUMNS, "converged"],
-    )
+    wind = read_wind_grid(wind_csv_path)
     wind = wind.with_columns(
         *(pl.col(column).mul(MPS_TO_MPH).alias(column) for column in GUST_COLUMNS)
     )
@@ -154,6 +152,29 @@ def attach_nearest_wind_grid(assets: pl.DataFrame, wind_csv_path: Path) -> pl.Da
     ).item():
         raise ValueError("one or more assets could not be attached to the wind grid")
     return attached
+
+
+def read_wind_grid(wind_csv_path: Path) -> pl.DataFrame:
+    """Read the grid, coordinates, and gust return levels (m/s).
+
+    Uses Data/Precomputed/wind_return_periods.parquet when it is there (about
+    40 MB instead of the 551 MB CSV), and the CSV otherwise. wind_csv_path is
+    Data/Wind_Return_Periods/gev_return_periods.csv, so Data is two levels up.
+    """
+    columns = ["lat_idx", "lon_idx", "latitude", "longitude", *GUST_COLUMNS, "converged"]
+    compact = precomputed_file(wind_csv_path.resolve().parents[1], WIND_FILE)
+    if compact is None:
+        return pl.read_csv(wind_csv_path, columns=columns)
+    return pl.read_parquet(compact, columns=columns).with_columns(
+        pl.col("lat_idx", "lon_idx").cast(pl.Int64),
+        pl.col(list(GUST_COLUMNS)).cast(pl.Float64),
+    )
+
+
+def wind_grid_source(wind_csv_path: Path) -> str:
+    """The file read_wind_grid reads, for run manifests."""
+    compact = precomputed_file(wind_csv_path.resolve().parents[1], WIND_FILE)
+    return str((compact or wind_csv_path).resolve())
 
 
 def attach_climate_zones(assets: pl.DataFrame, climate_zone_path: Path) -> pl.DataFrame:
@@ -296,6 +317,7 @@ def build_asset_scoped_damage(
         "lookup_path": str(lookup_path.resolve()),
         "asset_results_path": str(asset_results_path.resolve()),
         "wind_input": "nearest CONUS404 center; 3-second gust point estimates",
+        "wind_source": wind_grid_source(wind_csv_path),
         "aep_integration": "piecewise trapezoid with endpoints (1,0) and (0,1)",
         "tail_assumption": True,
     }

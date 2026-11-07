@@ -13,10 +13,14 @@ from streamlit_folium import st_folium
 
 from cadence.reference_data.economics_assets import FIPS_TO_STATE
 from cadence.reference_data.material_price_expansion import normalize_county_geoid
+from cadence.reference_data.precomputed import ZIP_BOUNDARIES_MAP_FILE, precomputed_root, usable_file
 from cadence.ui.paths import CLIMATE_ZONES, DATA_ROOT
 from cadence.ui.results_data import MAP_REGIONS
 
 ZCTA_PATH = DATA_ROOT / "Geography/Census_TIGER/raw/v2020/tl_2020_us_zcta520.zip"
+# Already simplified by MAP_SIMPLIFY_DEGREES, so the map can use it as is.
+PRECOMPUTED_ZCTA_MAP_PATH = precomputed_root(DATA_ROOT) / ZIP_BOUNDARIES_MAP_FILE
+MAP_SIMPLIFY_DEGREES = {"ZIP / ZCTA": 0.002, "County": 0.005, "State": 0.005}
 BASE_TILES = (
     "https://server.arcgisonline.com/ArcGIS/rest/services/"
     "Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
@@ -28,10 +32,17 @@ def load_map_boundaries(region: str, identifiers: tuple[str, ...]) -> gpd.GeoDat
     """Return only the selected 2020 ZCTAs or counties/states in WGS84."""
     if region not in MAP_REGIONS:
         raise ValueError("unsupported region")
+    already_simplified = False
     if region == "ZIP / ZCTA":
-        source = f"zip://{ZCTA_PATH.resolve()}"
-        # Read only the mapped ZIPs by attribute, not every ZCTA in a bounding box.
-        shapes = gpd.read_file(source, where=zcta_filter(identifiers))[["ZCTA5CE20", "geometry"]]
+        precomputed = usable_file(PRECOMPUTED_ZCTA_MAP_PATH)
+        if precomputed is not None:
+            shapes = gpd.read_parquet(precomputed, filters=[("ZCTA5CE20", "in", zcta_codes(identifiers))])
+            already_simplified = True
+        else:
+            source = f"zip://{ZCTA_PATH.resolve()}"
+            # Read only the mapped ZIPs by attribute, not every ZCTA in a bounding box.
+            shapes = gpd.read_file(source, where=zcta_filter(identifiers))
+        shapes = shapes[["ZCTA5CE20", "geometry"]]
         shapes["region_id"] = shapes["ZCTA5CE20"].astype(str).str.zfill(5)
     else:
         shapes = gpd.read_file(CLIMATE_ZONES)[["GEOID", "geometry"]]
@@ -48,18 +59,24 @@ def load_map_boundaries(region: str, identifiers: tuple[str, ...]) -> gpd.GeoDat
     if shapes.crs is None:
         raise ValueError("regional boundaries have no coordinate system")
     shapes = shapes.to_crs("EPSG:4326")
-    shapes["geometry"] = shapes.geometry.simplify(0.002 if region == "ZIP / ZCTA" else 0.005, preserve_topology=True)
+    if not already_simplified:
+        shapes["geometry"] = shapes.geometry.simplify(MAP_SIMPLIFY_DEGREES[region], preserve_topology=True)
     return shapes
 
 
-def zcta_filter(identifiers: tuple[str, ...]) -> str:
-    """Build an attribute filter that selects only the given 5-digit ZCTAs."""
+def zcta_codes(identifiers: tuple[str, ...]) -> list[str]:
+    """The given ZIPs as sorted, zero-padded 5-digit codes."""
     zips = sorted({str(value).zfill(5) for value in identifiers})
     if not zips:
         raise ValueError("no ZIP codes to map")
     if not all(len(value) == 5 and value.isdigit() for value in zips):
         raise ValueError("ZIP identifiers must be 5 digits")
-    return "ZCTA5CE20 IN ({})".format(", ".join(f"'{value}'" for value in zips))
+    return zips
+
+
+def zcta_filter(identifiers: tuple[str, ...]) -> str:
+    """Build an attribute filter that selects only the given 5-digit ZCTAs."""
+    return "ZCTA5CE20 IN ({})".format(", ".join(f"'{value}'" for value in zcta_codes(identifiers)))
 
 
 def render_results_map(
