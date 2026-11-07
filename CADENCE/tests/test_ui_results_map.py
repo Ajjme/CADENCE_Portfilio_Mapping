@@ -33,6 +33,7 @@ def test_loads_only_requested_zcta_boundaries(tmp_path: Path, monkeypatch) -> No
             if part.suffix != ".zip":
                 target.write(part, arcname=part.name)
     monkeypatch.setattr(results_map, "ZCTA_PATH", archive)
+    monkeypatch.setattr(results_map, "PRECOMPUTED_ZCTA_MAP_PATH", tmp_path / "not_built.parquet")
     results_map.load_map_boundaries.clear()
 
     shapes = results_map.load_map_boundaries("ZIP / ZCTA", ("27701", "90210"))

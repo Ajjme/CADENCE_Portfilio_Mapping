@@ -1,9 +1,13 @@
 """Extract approved HAZUS proxies and average unresolved variants by terrain."""
 
+from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 
 import duckdb
 import polars as pl
+
+from cadence.reference_data.precomputed import FRAGILITY_FILE, precomputed_file
 
 FRAGILITY_MAPPING_VERSION = "v1.0.0"
 FRAGILITY_SNAPSHOT_VERSION = "v1.0.0"
@@ -105,6 +109,63 @@ def load_terrain_averaged_curve(
     if roof_age < 1 or roof_age > 30:
         raise ValueError("roof_age must be between 1 and 30")
 
+    curve = _precomputed_curve(fragility_root, climate_zone, roof_age, official_material_id, terrain_id)
+    if curve is None or curve.is_empty():
+        curve = _partition_curve(fragility_root, climate_zone, roof_age, official_material_id, terrain_id)
+    if curve.is_empty():
+        raise ValueError(
+            f"missing curve for {climate_zone}, age {roof_age}, "
+            f"{official_material_id}, terrain {terrain_id}"
+        )
+    if curve.filter(
+        ~pl.col("wind_speed_mph").is_finite()
+        | ~pl.col("building_loss_ratio").is_finite()
+    ).height:
+        raise ValueError("fragility curve contains non-finite values")
+    if curve.filter(~pl.col("building_loss_ratio").is_between(0.0, 1.0)).height:
+        raise ValueError("fragility curve contains a damage ratio outside [0, 1]")
+    if curve["wind_speed_mph"].is_duplicated().any():
+        raise ValueError("fragility curve contains duplicate wind speeds")
+    return curve
+
+
+def _precomputed_curve(
+    fragility_root: Path,
+    climate_zone: str,
+    roof_age: int,
+    official_material_id: str,
+    terrain_id: int,
+) -> Optional[pl.DataFrame]:
+    """The curve from Data/Precomputed/fragility_curves.parquet, if that file is there.
+
+    fragility_root is Data/Fragility_Curves/iecc2021, so Data is two levels up.
+    """
+    path = precomputed_file(fragility_root.resolve().parents[1], FRAGILITY_FILE)
+    if path is None:
+        return None
+    curves = _read_precomputed_curves(str(path), path.stat().st_mtime_ns)
+    return curves.filter(
+        (pl.col("climate_zone") == climate_zone)
+        & (pl.col("lookup_roof_age") == roof_age)
+        & (pl.col("source_material_id") == official_material_id)
+        & (pl.col("terrain_id") == terrain_id)
+    ).select("wind_speed_mph", "building_loss_ratio", "source_curve_count").sort("wind_speed_mph")
+
+
+@lru_cache(maxsize=2)
+def _read_precomputed_curves(path: str, mtime_ns: int) -> pl.DataFrame:
+    # mtime_ns is part of the cache key, so a rebuilt file is read again.
+    return pl.read_parquet(path)
+
+
+def _partition_curve(
+    fragility_root: Path,
+    climate_zone: str,
+    roof_age: int,
+    official_material_id: str,
+    terrain_id: int,
+) -> pl.DataFrame:
+    """Average the raw curves in one partition, as the precompute script does for all of them."""
     partition = fragility_root / climate_zone / f"age_{roof_age:02d}"
     curves_path = _sql_path(partition / "curves_hu.parquet")
     points_path = _sql_path(partition / "curve_points_hu.parquet")
@@ -128,22 +189,7 @@ def load_terrain_averaged_curve(
         GROUP BY p.x
         ORDER BY p.x
     """
-    curve = duckdb.sql(query).pl()
-    if curve.is_empty():
-        raise ValueError(
-            f"missing curve for {climate_zone}, age {roof_age}, "
-            f"{official_material_id}, terrain {terrain_id}"
-        )
-    if curve.filter(
-        ~pl.col("wind_speed_mph").is_finite()
-        | ~pl.col("building_loss_ratio").is_finite()
-    ).height:
-        raise ValueError("fragility curve contains non-finite values")
-    if curve.filter(~pl.col("building_loss_ratio").is_between(0.0, 1.0)).height:
-        raise ValueError("fragility curve contains a damage ratio outside [0, 1]")
-    if curve["wind_speed_mph"].is_duplicated().any():
-        raise ValueError("fragility curve contains duplicate wind speeds")
-    return curve
+    return duckdb.sql(query).pl()
 
 
 def _sql_path(path: Path) -> str:

@@ -16,6 +16,13 @@ import polars as pl
 from openpyxl import load_workbook
 from shapely.geometry import box
 
+from cadence.reference_data.precomputed import (
+    ZIP_BOUNDARIES_LOOKUP_FILE,
+    ZIP_LOOKUP_FILE,
+    precomputed_root,
+    usable_file,
+)
+
 ECONOMICS_ASSET_SCHEMA_VERSION = "v0.1.0"
 MAX_NEAREST_GEOGRAPHY_DISTANCE_M = 50_000.0
 # Search boxes reach past the 50 km limit because that limit is measured in
@@ -149,8 +156,15 @@ def attach_economics_geography(
     cbsa_crosswalk_zip_path: Path,
     labor_geographies_path: Path,
     labor_wages_path: Path,
+    precomputed_zcta_path: Optional[Path] = None,
+    precomputed_crosswalk_path: Optional[Path] = None,
 ) -> pl.DataFrame:
-    """Attach ZCTA, county, CBSA, state, and BLS labor area to asset points."""
+    """Attach ZCTA, county, CBSA, state, and BLS labor area to asset points.
+
+    The two precomputed paths are optional. When given, ZIP polygons and the
+    ZIP-to-county/CBSA lookup come from the small precomputed files instead of
+    the raw shapefile and NHGIS crosswalks.
+    """
     _require_columns(assets, ("asset_id", "latitude", "longitude"), "assets")
     points = gpd.GeoDataFrame(
         assets.select("asset_id", "latitude", "longitude").to_pandas(),
@@ -161,8 +175,11 @@ def attach_economics_geography(
         [box(*bounds) for bounds in asset_search_boxes(assets["latitude"], assets["longitude"])],
         crs="EPSG:4326",
     )
-    zcta_source = f"zip://{zcta_path.resolve()}" if zcta_path.suffix == ".zip" else zcta_path
-    zctas = gpd.read_file(zcta_source, mask=search_area)[["ZCTA5CE20", "geometry"]]
+    if precomputed_zcta_path is not None:
+        zctas = _read_precomputed_zctas(precomputed_zcta_path, search_area)
+    else:
+        zcta_source = f"zip://{zcta_path.resolve()}" if zcta_path.suffix == ".zip" else zcta_path
+        zctas = gpd.read_file(zcta_source, mask=search_area)[["ZCTA5CE20", "geometry"]]
     zctas = zctas.to_crs("EPSG:4326").rename(columns={"ZCTA5CE20": "zip_code"})
     point_zcta = _assign_polygon_geography(
         points,
@@ -195,11 +212,16 @@ def attach_economics_geography(
     )
     if spatial.join(labor_ids, on="labor_market_id", how="anti").height:
         raise ValueError("one or more assigned labor markets have no wage data")
-    crosswalk = build_selected_zcta_crosswalk(
-        spatial["zip_code"].unique().to_list(),
-        zcta_crosswalk_path,
-        cbsa_crosswalk_zip_path,
-    )
+    if precomputed_crosswalk_path is not None:
+        crosswalk = _select_precomputed_crosswalk(
+            precomputed_crosswalk_path, spatial["zip_code"].unique().to_list()
+        )
+    else:
+        crosswalk = build_selected_zcta_crosswalk(
+            spatial["zip_code"].unique().to_list(),
+            zcta_crosswalk_path,
+            cbsa_crosswalk_zip_path,
+        )
     result = spatial.join(crosswalk, on="zip_code", how="left", validate="m:1")
     result = result.with_columns(
         pl.col("county_fips").str.slice(0, 2).replace_strict(FIPS_TO_STATE).alias(
@@ -223,6 +245,29 @@ def attach_economics_geography(
     return assets.join(result, on="asset_id", how="left", validate="1:1").sort(
         "asset_id"
     )
+
+
+def _read_precomputed_zctas(path: Path, search_area: gpd.GeoSeries) -> gpd.GeoDataFrame:
+    """Read only the precomputed ZCTA polygons whose bounding box touches a search box.
+
+    The file has a bounding-box column and nearby ZIPs are stored together, so
+    each read only touches a small part of it.
+    """
+    parts = [gpd.read_parquet(path, bbox=tuple(area.bounds)) for area in search_area]
+    zctas = pd.concat(parts, ignore_index=True).drop_duplicates("ZCTA5CE20")
+    return gpd.GeoDataFrame(zctas[["ZCTA5CE20", "geometry"]], geometry="geometry", crs=parts[0].crs)
+
+
+def _select_precomputed_crosswalk(path: Path, zip_codes: Sequence[str]) -> pl.DataFrame:
+    """Same rows build_selected_zcta_crosswalk returns, from the precomputed lookup."""
+    selected = sorted(set(zip_codes))
+    if not selected:
+        raise ValueError("at least one ZIP code is required")
+    result = pl.read_parquet(path).filter(pl.col("zip_code").is_in(selected)).sort("zip_code")
+    missing = sorted(set(selected) - set(result["zip_code"].to_list()))
+    if missing:
+        raise ValueError("NHGIS crosswalk is missing ZCTAs: " + ", ".join(missing))
+    return result
 
 
 def asset_search_boxes(
@@ -446,6 +491,8 @@ def build_economics_asset_features(
         paths["cbsa_crosswalk"],
         paths["labor_geographies"],
         paths["labor_wages"],
+        precomputed_zcta_path=usable_file(paths["zcta_precomputed"]),
+        precomputed_crosswalk_path=usable_file(paths["zcta_crosswalk_precomputed"]),
     )
     _validate_output(features)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -473,6 +520,10 @@ def build_economics_asset_features(
             "labor_assignment_distance_m"
         ].max(),
         "output_path": str(output_path.resolve()),
+        "zcta_boundary_source": str((usable_file(paths["zcta_precomputed"]) or paths["zcta"]).resolve()),
+        "zcta_crosswalk_source": str(
+            (usable_file(paths["zcta_crosswalk_precomputed"]) or paths["zcta_crosswalk"]).resolve()
+        ),
     }
     temporary_manifest = manifest_path.with_suffix(".json.tmp")
     temporary_manifest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -529,6 +580,8 @@ def _source_paths(repository_root: Path) -> Dict[str, Path]:
         "zcta": geography / "Census_TIGER" / "raw" / "v2020" / "tl_2020_us_zcta520.zip",
         "zcta_crosswalk": geography / "IPUMS_NHGIS" / "raw" / "v2020" / "nhgis_blk2010_zcta2020" / "nhgis_blk2010_zcta2020.csv",
         "cbsa_crosswalk": geography / "IPUMS_NHGIS" / "raw" / "v2020" / "nhgis_blk2010_cbsa2020.zip",
+        "zcta_precomputed": precomputed_root(repository_root / "Data") / ZIP_BOUNDARIES_LOOKUP_FILE,
+        "zcta_crosswalk_precomputed": precomputed_root(repository_root / "Data") / ZIP_LOOKUP_FILE,
         "labor_geographies": labor / "labor_geographies.parquet",
         "labor_wages": labor / "labor_wages_long.parquet",
         "mapping": mapping / "master_mapping_reference_draft.csv",

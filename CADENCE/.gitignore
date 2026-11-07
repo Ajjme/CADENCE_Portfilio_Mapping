@@ -56,3 +56,5 @@ Data/Climate_Zones/*
 !Data_Catalogs/User_inputs_data_catalog.xlsx
 !Data_Catalogs/Vulnerability_data_catalog.xlsx
 !Data_Catalogs/Consolidated_data_catalog.xlsx
+!Data/Precomputed/*.parquet
+!Data/Precomputed/manifest.json

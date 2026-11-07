@@ -1,0 +1,110 @@
+{
+  "outputs": {
+    "wind": {
+      "rows": 1387505,
+      "columns": [
+        "lat_idx",
+        "lon_idx",
+        "latitude",
+        "longitude",
+        "rp_10_3sec_gust",
+        "rp_25_3sec_gust",
+        "rp_50_3sec_gust",
+        "rp_100_3sec_gust",
+        "rp_200_3sec_gust",
+        "rp_500_3sec_gust",
+        "converged"
+      ],
+      "gust_units": "m/s, same as the source CSV",
+      "max_gust_rounding_mps": 7.61718749231477e-06,
+      "file": "wind_return_periods.parquet",
+      "bytes": 40863280,
+      "seconds": 1.7,
+      "sources": {
+        "wind": {
+          "path": "Data/Wind_Return_Periods/gev_return_periods.csv",
+          "bytes": 551189043,
+          "modified": "2026-11-07T01:40:22.880172+00:00"
+        }
+      }
+    },
+    "zip_lookup": {
+      "rows": 33775,
+      "columns": [
+        "zip_code",
+        "county_fips",
+        "county_crosswalk_weight",
+        "cbsa_code",
+        "cbsa_crosswalk_weight"
+      ],
+      "zips_without_cbsa": 0,
+      "file": "zcta_county_cbsa.parquet",
+      "bytes": 578679,
+      "seconds": 12.3,
+      "sources": {
+        "zcta_crosswalk": {
+          "path": "Data/Geography/IPUMS_NHGIS/raw/v2020/nhgis_blk2010_zcta2020/nhgis_blk2010_zcta2020.csv",
+          "bytes": 593517099,
+          "modified": "2026-11-07T01:40:47.024017+00:00"
+        },
+        "cbsa_crosswalk": {
+          "path": "Data/Geography/IPUMS_NHGIS/raw/v2020/nhgis_blk2010_cbsa2020.zip",
+          "bytes": 59712800,
+          "modified": "2026-11-07T01:25:31.070043+00:00"
+        }
+      }
+    },
+    "zip_boundaries": {
+      "rows": 33791,
+      "crs": "EPSG:4326",
+      "id_column": "ZCTA5CE20",
+      "lookup_simplify_degrees": 0.0001,
+      "map_simplify_degrees": 0.002,
+      "lookup_file": "zcta_boundaries_lookup.parquet",
+      "map_file": "zcta_boundaries_map.parquet",
+      "lookup_bytes": 124501096,
+      "map_bytes": 21589996,
+      "seconds": 625.3,
+      "sources": {
+        "zcta": {
+          "path": "Data/Geography/Census_TIGER/raw/v2020/tl_2020_us_zcta520.zip",
+          "bytes": 527995578,
+          "modified": "2026-11-07T01:39:57.801100+00:00"
+        }
+      }
+    },
+    "fragility": {
+      "rows": 295200,
+      "curves": 7200,
+      "columns": [
+        "climate_zone",
+        "lookup_roof_age",
+        "source_material_id",
+        "terrain_id",
+        "wind_speed_mph",
+        "building_loss_ratio",
+        "source_curve_count",
+        "fragility_proxy_id",
+        "fragility_mapping_version",
+        "curve_aggregation_method"
+      ],
+      "missing_partitions": [],
+      "missing_curve_count": 0,
+      "missing_curves_sample": [],
+      "file": "fragility_curves.parquet",
+      "bytes": 1630231,
+      "seconds": 27.1,
+      "sources": {
+        "fragility": {
+          "path": "Data/Fragility_Curves/iecc2021",
+          "files": 1440,
+          "bytes": 7185592738
+        }
+      }
+    }
+  },
+  "precompute_version": "v1",
+  "fragility_mapping_version": "v1.0.0",
+  "updated_at": "2026-11-07T21:29:24.046214+00:00",
+  "cadence_commit": "ae69cb84b70490d4e57553a4f98d7c50a7ddabdd"
+}
