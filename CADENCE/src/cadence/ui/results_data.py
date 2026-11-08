@@ -12,6 +12,7 @@ import pandas as pd
 import polars as pl
 import streamlit as st
 
+from cadence.economics.run_export import build_run_workbook, portfolio_summary  # noqa: F401
 from cadence.economics.temporary_policies import TEMPORARY_TILE_POLICY_ID
 from cadence.reference_data.fragility import (
     CURVE_AGGREGATION_METHOD,
@@ -553,33 +554,11 @@ def material_mix_label(materials: pd.DataFrame) -> str:
     return " · ".join(["Installed roofs", *parts])
 
 
-def portfolio_summary(summary: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate additive final outcomes without masking incomplete rows."""
-    value_columns = [
-        "cumulative_avoided_damage_usd",
-        "cumulative_discounted_avoided_damage_usd",
-        "cumulative_net_benefit_usd",
-        "net_present_value_usd",
-    ]
-    flag_columns = [
-        "active_cost_fallback_applied",
-        "repair_cost_incomplete",
-        "climate_risk_total_incomplete",
-        "event_cost_incomplete",
-    ]
-    rows = []
-    for scenario_id, group in summary.groupby("scenario_id", sort=True):
-        row: dict[str, Any] = {
-            "scenario_id": scenario_id,
-            "asset_count": group["asset_id"].nunique(),
-            "burnout_replacement_count": group["burnout_replacement_count"].sum(),
-        }
-        for column in value_columns:
-            row[column] = group[column].sum() if group[column].notna().all() else None
-        for column in flag_columns:
-            row[column] = bool(group[column].fillna(True).any())
-        rows.append(row)
-    return pd.DataFrame(rows)
+@st.cache_data(show_spinner="Preparing the Excel file...")
+def export_run_workbook(run_root: str) -> bytes:
+    """The run as one Excel file, after the same checks the results page runs."""
+    load_run_metadata(run_root)
+    return build_run_workbook(Path(run_root))
 
 
 def _annual_pattern(root: Path, metadata: dict[str, Any]) -> str:
