@@ -10,6 +10,7 @@ from polars.exceptions import PolarsError
 import streamlit as st
 
 from cadence.economics.market_pipeline import run_market_study
+from cadence.economics.run_export import XLSX_MIME
 from cadence.ui.charts import (
     COST_COMPONENTS,
     MATERIAL_NAMES,
@@ -33,6 +34,7 @@ from cadence.ui.results_data import (
     asset_options,
     cost_allocations,
     discover_runs,
+    export_run_workbook,
     load_asset_series,
     load_year_cost_rows,
     load_current_materials,
@@ -89,6 +91,7 @@ def render() -> None:
         f"Run `{metadata['run_id']}` · schema `{metadata['schema_version']}` · "
         f"{metadata['asset_count']:,} assets · Real 2026 USD"
     )
+    _render_export(run_root, metadata)
 
     overview_tab, time_tab, summary_tab, cost_tab, wind_tab, fragility_tab, study_tab, run_tab = st.tabs(
         ["Overview", "Time Series", "Alternative Summary", "Cost Allocations", "Wind Return Period", "Roof Fragility Curves", "Market Study", "Run Information"]
@@ -448,6 +451,27 @@ def _render_fragility_curves(run_root: str, asset_id: str, metadata: dict) -> No
     )
     if curves["curve_provenance"].iloc[0] == "Identity-verified legacy reference":
         st.caption("Legacy verification compares source paths, sizes, and modification timestamps; it is not a content-checksum verification.")
+
+
+def _render_export(run_root: str, metadata: dict) -> None:
+    """Download the whole run as one Excel file. Built on request, since big runs take a moment."""
+    ready_key = f"export_ready_{metadata['run_id']}"
+    if not st.session_state.get(ready_key):
+        if not st.button("Prepare Excel download", key=f"prepare_export_{metadata['run_id']}"):
+            return
+        st.session_state[ready_key] = True
+    try:
+        workbook = export_run_workbook(run_root)
+    except (ValueError, OSError, DuckDBError) as error:
+        st.warning(f"Excel download unavailable: {error}")
+        return
+    st.download_button(
+        "Download results (Excel)",
+        data=workbook,
+        file_name=f"cadence_results_{metadata['run_id']}.xlsx",
+        mime=XLSX_MIME,
+        key=f"download_export_{metadata['run_id']}",
+    )
 
 
 def _render_run_information(metadata: dict, run_root: str) -> None:
