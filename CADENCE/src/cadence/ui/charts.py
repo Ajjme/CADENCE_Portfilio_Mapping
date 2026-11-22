@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.colors import qualitative
 
+from cadence.economics.run_results import COST_COMPONENTS
 from cadence.ui.theme import SCENARIO_COLORS, THEME
 from cadence.vulnerability.expected_damage import RETURN_PERIODS
 
@@ -53,14 +54,6 @@ def market_cost_figure(costs: pd.DataFrame) -> go.Figure:
     figure.update_layout(title="Expected annual portfolio costs", barmode="stack", xaxis_title="Year",
                          yaxis_title="Real 2026 USD", margin=dict(l=24, r=24, t=56, b=30))
     return figure
-COST_COMPONENTS = {
-    "material_usd": "Material",
-    "labor_usd": "Labor",
-    "repair_usd": "Expected repair",
-    "loss_of_use_usd": "Loss of use",
-    "disposal_usd": "Disposal",
-    "carbon_usd": "Carbon",
-}
 
 
 def scenario_labels(current_material_id: str | None, portfolio: bool = False) -> dict[str, str]:
