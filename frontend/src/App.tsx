@@ -58,7 +58,15 @@ function App() {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        {page === 'portfolio' && <PortfolioPage />}
+        {page === 'portfolio' && (
+          <PortfolioPage
+            onRunFinished={(newRunId) => {
+              // Open the finished run on the Results page.
+              setRunId(newRunId)
+              setPage('results')
+            }}
+          />
+        )}
         {page === 'results' && (
           <ResultsPage runId={runId} onRunChange={setRunId} />
         )}

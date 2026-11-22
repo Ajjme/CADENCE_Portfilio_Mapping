@@ -1,13 +1,8 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '../api/client'
-import {
-  getCostAllocations,
-  getRun,
-  getRunSummary,
-  runAnalysis,
-} from '../api/runs'
+import { getCostAllocations, getRun, getRunSummary } from '../api/runs'
 import { renderWithProviders } from '../test/renderWithProviders'
 import ResultsPage from './ResultsPage'
 
@@ -17,7 +12,6 @@ vi.mock('../api/runs', () => ({
   getRunSummary: vi.fn(),
   getRunSeries: vi.fn(() => new Promise(() => {})),
   getCostAllocations: vi.fn(),
-  runAnalysis: vi.fn(),
   runExportUrl: (runId: string) => `/api/runs/${runId}/export`,
 }))
 
@@ -73,19 +67,6 @@ beforeEach(() => {
 })
 
 describe('ResultsPage with no run open', () => {
-  it('runs the example portfolio and opens the new run', async () => {
-    vi.mocked(runAnalysis).mockResolvedValue(RUN)
-    const onRunChange = vi.fn()
-    renderWithProviders(<ResultsPage runId={null} onRunChange={onRunChange} />)
-
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Run the example portfolio' }),
-    )
-
-    expect(runAnalysis).toHaveBeenCalledWith({})
-    await waitFor(() => expect(onRunChange).toHaveBeenCalledWith('abc123'))
-  })
-
   it('opens a run by its ID', async () => {
     const onRunChange = vi.fn()
     renderWithProviders(<ResultsPage runId={null} onRunChange={onRunChange} />)
