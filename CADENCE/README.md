@@ -49,6 +49,41 @@ Streamlit is an orchestration and visualization layer. Scientific, vulnerability
 
 > **Temporary Alternative Analysis policy:** `NEW_TILE` currently uses `NEW_METAL` lifecycle timing and vulnerability values while retaining Tile scenario/material identity. Its installed and repair costs are derived from Metal at a `1.2` multiplier. Run metadata records this as `temporary_tile_as_metal_with_1_2x_cost_v1`, and the policy ID participates in deterministic run hashing so prior immutable runs are never overwritten or reused. This isolated policy is intended to be removed when authoritative Tile inputs are ready.
 
+## FastAPI Backend
+
+The new React frontend (`../frontend`) talks to a small FastAPI backend in `src/cadence/api`. It runs the same pipeline and reads runs the same way as the Streamlit app (the shared reads are in `src/cadence/economics/run_results.py`), so the two show the same numbers. Install it and its test dependencies from the repository root:
+
+```shell
+pip install -e "./CADENCE[api,test]"
+```
+
+Start it from this directory:
+
+```shell
+uvicorn cadence.api.main:app --reload --app-dir src
+```
+
+Then open **http://127.0.0.1:8000/docs** to see every endpoint and try them in the browser.
+
+| Endpoint | What it does |
+| --- | --- |
+| `GET /api/health` | Checks the server is up |
+| `GET /api/settings` | Default run settings and their allowed values |
+| `GET /api/portfolio/example` | Downloads the example asset workbook |
+| `GET /api/portfolio/default` | The example workbook's validated assets |
+| `POST /api/portfolio` | Uploads and validates a workbook, and returns its `workbook_id` |
+| `POST /api/runs` | Runs the Alternative Analysis for a workbook, optional asset subset, and settings. Waits until the run finishes |
+| `GET /api/runs/{run_id}` | The run's settings and asset count |
+| `GET /api/runs/{run_id}/summary` | Final NPV and other results by asset and replacement option, plus portfolio totals |
+| `GET /api/runs/{run_id}/series` | One yearly metric for each replacement option, for one asset or the portfolio |
+| `GET /api/runs/{run_id}/cost-allocations` | One year's costs split into material, labor, repair, and the rest |
+| `GET /api/runs/{run_id}/export` | The run as one Excel file |
+
+- One analysis runs at a time, and a second request waits for the first.
+- Runs aren't meant to be kept. They're written to `cadence_datalake` like the Streamlit app's, and most hosts wipe that folder on restart.
+- Browsers can call the API from the Vite dev server (`http://localhost:5173`). To allow other addresses, like the deployed frontend, set `CADENCE_API_ORIGINS` to a comma-separated list of every address to allow.
+- Not in the API yet: the Market Study, wind return periods, fragility curves, and map geography.
+
 ## System Layout
 
 The repository is organized so a human can locate each domain by intent rather than by a single flat script folder:
