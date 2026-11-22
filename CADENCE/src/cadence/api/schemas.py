@@ -75,6 +75,10 @@ class RunInfo(BaseModel):
     demand_surge: Optional[bool] = None
     enabled_cost_streams: list[str]
     dollar_basis: Optional[str] = None
+    market_study_ready: bool = Field(
+        default=False,
+        description="True when the backend has the asset inputs the Market Study needs for this run",
+    )
 
 
 class PortfolioScenario(BaseModel):
@@ -154,3 +158,57 @@ class CostAllocations(BaseModel):
     year: int
     labels: dict[str, str] = Field(description="Cost columns and their labels, in chart order")
     rows: list[CostAllocation]
+
+
+class MarketStudyRequest(BaseModel):
+    max_payback_years: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Longest payback a homeowner accepts for a voluntary replacement. Leave out for no limit.",
+    )
+
+
+class RoofShare(BaseModel):
+    """How many roofs of one material the portfolio has in one year, after that year's replacements."""
+
+    year: int
+    material_id: str = Field(description="OFFICIAL_ASPHALT, OFFICIAL_METAL, OFFICIAL_TILE, or UNKNOWN")
+    asset_count: int
+    share_percent: float
+
+
+class MarketYear(BaseModel):
+    """The portfolio's expected costs in one year, and how many roofs were replaced and why."""
+
+    year: int
+    repair_usd: Optional[float] = None
+    loss_of_use_usd: Optional[float] = None
+    material_usd: Optional[float] = None
+    labor_usd: Optional[float] = None
+    disposal_usd: Optional[float] = None
+    carbon_usd: Optional[float] = None
+    total_usd: Optional[float] = Field(default=None, description="Null when an asset's costs are incomplete")
+    replacement_count: int
+    eul_replacements: int
+    damage_replacements: int
+    economic_replacements: int
+    unknown_count: int
+
+
+class MarketStudy(BaseModel):
+    """An experimental study of which roofs a homeowner would replace each year, and when."""
+
+    run_id: str = Field(description="The Alternative Analysis run the study is based on")
+    study_id: str
+    max_payback_years: Optional[int] = None
+    newly_calculated: bool = Field(description="False when an earlier study with the same settings was reused")
+    asset_count: int
+    last_verified_year: int = Field(description="The run's last year. Later years hold prices and climate constant")
+    evaluation_end_year: int
+    real_discount_rate: float
+    enabled_cost_streams: list[str]
+    tile_uses_metal_proxy: bool
+    policy_id: str
+    cost_labels: dict[str, str] = Field(description="Cost columns and their labels, in chart order")
+    roof_share: list[RoofShare]
+    costs: list[MarketYear]

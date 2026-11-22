@@ -410,6 +410,113 @@
           }
         }
       }
+    },
+    "/api/runs/{run_id}/market-study": {
+      "get": {
+        "summary": "Saved Market Study",
+        "description": "The Market Study already saved for these settings. 404 if it hasn't been run yet.",
+        "operationId": "saved_market_study_api_runs__run_id__market_study_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "max_payback_years",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The payback limit the study was run with. Leave out for none.",
+              "title": "Max Payback Years"
+            },
+            "description": "The payback limit the study was run with. Leave out for none."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketStudy"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Run Market Study",
+        "description": "Run the experimental Market Study for the whole portfolio. Waits until it finishes.",
+        "operationId": "run_market_study_api_runs__run_id__market_study_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketStudyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketStudy"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -750,6 +857,243 @@
         "type": "object",
         "title": "Health"
       },
+      "MarketStudy": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "The Alternative Analysis run the study is based on"
+          },
+          "study_id": {
+            "type": "string",
+            "title": "Study Id"
+          },
+          "max_payback_years": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Payback Years"
+          },
+          "newly_calculated": {
+            "type": "boolean",
+            "title": "Newly Calculated",
+            "description": "False when an earlier study with the same settings was reused"
+          },
+          "asset_count": {
+            "type": "integer",
+            "title": "Asset Count"
+          },
+          "last_verified_year": {
+            "type": "integer",
+            "title": "Last Verified Year",
+            "description": "The run's last year. Later years hold prices and climate constant"
+          },
+          "evaluation_end_year": {
+            "type": "integer",
+            "title": "Evaluation End Year"
+          },
+          "real_discount_rate": {
+            "type": "number",
+            "title": "Real Discount Rate"
+          },
+          "enabled_cost_streams": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Enabled Cost Streams"
+          },
+          "tile_uses_metal_proxy": {
+            "type": "boolean",
+            "title": "Tile Uses Metal Proxy"
+          },
+          "policy_id": {
+            "type": "string",
+            "title": "Policy Id"
+          },
+          "cost_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Cost Labels",
+            "description": "Cost columns and their labels, in chart order"
+          },
+          "roof_share": {
+            "items": {
+              "$ref": "#/components/schemas/RoofShare"
+            },
+            "type": "array",
+            "title": "Roof Share"
+          },
+          "costs": {
+            "items": {
+              "$ref": "#/components/schemas/MarketYear"
+            },
+            "type": "array",
+            "title": "Costs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "study_id",
+          "newly_calculated",
+          "asset_count",
+          "last_verified_year",
+          "evaluation_end_year",
+          "real_discount_rate",
+          "enabled_cost_streams",
+          "tile_uses_metal_proxy",
+          "policy_id",
+          "cost_labels",
+          "roof_share",
+          "costs"
+        ],
+        "title": "MarketStudy",
+        "description": "An experimental study of which roofs a homeowner would replace each year, and when."
+      },
+      "MarketStudyRequest": {
+        "properties": {
+          "max_payback_years": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Payback Years",
+            "description": "Longest payback a homeowner accepts for a voluntary replacement. Leave out for no limit."
+          }
+        },
+        "type": "object",
+        "title": "MarketStudyRequest"
+      },
+      "MarketYear": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "repair_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Usd"
+          },
+          "loss_of_use_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loss Of Use Usd"
+          },
+          "material_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Usd"
+          },
+          "labor_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labor Usd"
+          },
+          "disposal_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disposal Usd"
+          },
+          "carbon_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carbon Usd"
+          },
+          "total_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Usd",
+            "description": "Null when an asset's costs are incomplete"
+          },
+          "replacement_count": {
+            "type": "integer",
+            "title": "Replacement Count"
+          },
+          "eul_replacements": {
+            "type": "integer",
+            "title": "Eul Replacements"
+          },
+          "damage_replacements": {
+            "type": "integer",
+            "title": "Damage Replacements"
+          },
+          "economic_replacements": {
+            "type": "integer",
+            "title": "Economic Replacements"
+          },
+          "unknown_count": {
+            "type": "integer",
+            "title": "Unknown Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "replacement_count",
+          "eul_replacements",
+          "damage_replacements",
+          "economic_replacements",
+          "unknown_count"
+        ],
+        "title": "MarketYear",
+        "description": "The portfolio's expected costs in one year, and how many roofs were replaced and why."
+      },
       "Portfolio": {
         "properties": {
           "workbook_id": {
@@ -879,6 +1223,36 @@
         "title": "PortfolioScenario",
         "description": "Totals across all assets for one replacement option. A total is null when any asset is missing a value."
       },
+      "RoofShare": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "material_id": {
+            "type": "string",
+            "title": "Material Id",
+            "description": "OFFICIAL_ASPHALT, OFFICIAL_METAL, OFFICIAL_TILE, or UNKNOWN"
+          },
+          "asset_count": {
+            "type": "integer",
+            "title": "Asset Count"
+          },
+          "share_percent": {
+            "type": "number",
+            "title": "Share Percent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "material_id",
+          "asset_count",
+          "share_percent"
+        ],
+        "title": "RoofShare",
+        "description": "How many roofs of one material the portfolio has in one year, after that year's replacements."
+      },
       "RunInfo": {
         "properties": {
           "run_id": {
@@ -962,6 +1336,12 @@
               }
             ],
             "title": "Dollar Basis"
+          },
+          "market_study_ready": {
+            "type": "boolean",
+            "title": "Market Study Ready",
+            "description": "True when the backend has the asset inputs the Market Study needs for this run",
+            "default": false
           }
         },
         "type": "object",

@@ -14,5 +14,7 @@ export default defineConfig({
     // jsdom is a pretend browser, so tests can render pages without opening one.
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
+    // Forget which pretend backend calls were made, so every test starts fresh.
+    clearMocks: true,
   },
 })

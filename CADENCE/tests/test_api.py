@@ -13,6 +13,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from cadence.api import main, service  # noqa: E402
 from cadence.economics.contracts import CostStream  # noqa: E402
+from cadence.economics.market_inputs import file_sha256  # noqa: E402
+from cadence.economics.market_pipeline import POLICY_ID, SCHEMA_VERSION  # noqa: E402
 from cadence.economics.run_export import XLSX_MIME  # noqa: E402
 from cadence.economics.run_results import COST_COMPONENTS, SCENARIOS  # noqa: E402
 from cadence.ui.paths import DEFAULT_WORKBOOK  # noqa: E402
@@ -124,6 +126,8 @@ def test_settings_come_from_the_repository_config(client: TestClient) -> None:
 def test_run_info(client: TestClient) -> None:
     run = client.get(f"/api/runs/{RUN_ID}").json()
 
+    assert run["market_study_ready"] is False
+
     assert run["run_id"] == RUN_ID
     assert run["asset_count"] == 2
     assert (run["start_year"], run["end_year"]) == (2026, 2026)
@@ -229,7 +233,7 @@ def test_run_uses_the_selected_assets_and_settings(client: TestClient, monkeypat
 
     def fake_analysis(workbook, work_root, progress=None, config=None):
         calls.append({"workbook": workbook, "config": config})
-        return {"run_id": RUN_ID}
+        return {"run_id": RUN_ID, "run_root": "anywhere", **_study_files(work_root)}
 
     monkeypatch.setattr(service, "run_portfolio_analysis", fake_analysis)
     first_asset = client.get("/api/portfolio/default").json()["assets"][0]["asset_id"]
@@ -245,6 +249,8 @@ def test_run_uses_the_selected_assets_and_settings(client: TestClient, monkeypat
     assert config.end_year == 2030 and config.demand_surge is True
     assert config.enabled_cost_streams == frozenset({CostStream.MATERIAL, CostStream.LABOR})
     assert calls[0]["workbook"].name == "selected_assets.xlsx"
+    # The run's asset files are kept for the Market Study.
+    assert response.json()["market_study_ready"] is True
 
 
 def test_run_rejects_bad_settings_and_unknown_workbooks(client: TestClient) -> None:
@@ -264,3 +270,118 @@ def test_the_frontend_schema_matches_the_api() -> None:
     current = json.loads(write_openapi.schema_text())
     assert saved["paths"] == current["paths"], fix
     assert saved["components"] == current["components"], fix
+
+
+def _study_files(folder: Path) -> dict:
+    """Stand-ins for the asset files a real run saves, which the Market Study reads."""
+    folder.mkdir(parents=True, exist_ok=True)
+    paths = {}
+    for key in ("economics_ready_asset_path", "asset_damage_result_path"):
+        path = folder / f"{key}.parquet"
+        path.write_bytes(b"stand-in")
+        paths[key] = str(path)
+    return paths
+
+
+def _save_study_inputs(tmp_path: Path) -> None:
+    inputs = tmp_path / "api" / "run_inputs" / f"{RUN_ID}.json"
+    inputs.parent.mkdir(parents=True)
+    inputs.write_text(
+        json.dumps({"run_id": RUN_ID, "run_root": "anywhere", **_study_files(tmp_path / "inputs")}),
+        encoding="utf-8",
+    )
+
+
+def _write_study(study_root: Path, run_root: Path) -> Path:
+    """A saved two-asset, two-year Market Study, like run_market_study publishes."""
+    folder = study_root / f"schema_version={SCHEMA_VERSION}" / "run_id=study-test"
+    folder.mkdir(parents=True)
+    pl.DataFrame({
+        "year": [2026, 2026, 2027, 2027],
+        "material_id": ["OFFICIAL_ASPHALT", "OFFICIAL_METAL", "OFFICIAL_METAL", "UNKNOWN"],
+        "asset_count": [1, 1, 1, 1],
+        "portfolio_count": [2, 2, 2, 2],
+        "share_percent": [50.0, 50.0, 50.0, 50.0],
+    }).write_parquet(folder / "annual_roof_share.parquet")
+    pl.DataFrame({
+        "year": [2026, 2027],
+        "repair_usd": [20.0, 25.0], "loss_of_use_usd": [0.0, 0.0],
+        "material_usd": [70.0, 0.0], "labor_usd": [30.0, 0.0],
+        "disposal_usd": [5.0, 0.0], "carbon_usd": [0.0, 0.0],
+        "total_usd": [125.0, None],
+        "replacement_count": [1, 0], "eul_replacements": [0, 0], "damage_replacements": [0, 0],
+        "economic_replacements": [1, 0], "unknown_count": [0, 1],
+    }).write_parquet(folder / "annual_portfolio_costs.parquet")
+    manifest = {
+        "run_id": "study-test", "schema_version": SCHEMA_VERSION, "policy_id": POLICY_ID,
+        "parent_run_id": RUN_ID, "parent_run_root": str(run_root.resolve()),
+        "run_config": {"real_discount_rate": 0.02, "enabled_cost_streams": ["material", "labor"]},
+        "temporary_tile_policy": {"policy_id": "temporary_tile_as_metal_with_1_2x_cost_v1"},
+        "asset_count": 2, "max_payback_years": 5,
+        "last_verified_year": 2027, "evaluation_end_year": 2060,
+        "artifact_checksums": {
+            name: file_sha256(folder / name)
+            for name in ("annual_roof_share.parquet", "annual_portfolio_costs.parquet")
+        },
+    }
+    (folder / "run_metadata.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return folder
+
+
+def test_market_study_needs_a_run_started_from_the_portfolio_page(client: TestClient) -> None:
+    saved = client.get(f"/api/runs/{RUN_ID}/market-study")
+    run = client.post(f"/api/runs/{RUN_ID}/market-study", json={})
+
+    assert saved.status_code == run.status_code == 404
+    assert "Asset Portfolio page" in run.json()["detail"]
+
+
+def test_market_study_runs_and_returns_roof_shares_and_costs(
+    client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    _save_study_inputs(tmp_path)
+    run_root = tmp_path / "roof_alternative_analysis" / "schema_version=v0.4.0" / f"run_id={RUN_ID}"
+    study = _write_study(tmp_path / "studies", run_root)
+    monkeypatch.setattr(service, "STUDY_ROOT", tmp_path / "studies")
+    calls = []
+
+    def fake_study(parent_root, inputs, max_payback_years):
+        calls.append((parent_root, inputs, max_payback_years))
+        return {"run_root": str(study), "cache_hit": False}
+
+    monkeypatch.setattr(service, "run_market_study", fake_study)
+
+    result = client.post(f"/api/runs/{RUN_ID}/market-study", json={"max_payback_years": 5}).json()
+
+    assert calls[0][2] == 5
+    assert calls[0][1]["run_id"] == RUN_ID
+    assert Path(calls[0][1]["economics_ready_asset_path"]).is_file()
+    assert result["study_id"] == "study-test"
+    assert result["newly_calculated"] is True
+    assert result["tile_uses_metal_proxy"] is True
+    assert list(result["cost_labels"])[:2] == ["repair_usd", "loss_of_use_usd"]
+    assert len(result["roof_share"]) == 4
+    assert result["costs"][0]["material_usd"] == 70.0
+    assert result["costs"][1]["total_usd"] is None
+    assert client.get(f"/api/runs/{RUN_ID}").json()["market_study_ready"] is True
+
+
+def test_saved_market_study_opens_without_running_again(
+    client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    _save_study_inputs(tmp_path)
+    run_root = tmp_path / "roof_alternative_analysis" / "schema_version=v0.4.0" / f"run_id={RUN_ID}"
+    study = _write_study(tmp_path / "studies", run_root)
+    monkeypatch.setattr(service, "STUDY_ROOT", tmp_path / "studies")
+    monkeypatch.setattr(service, "study_identity", lambda *_: {"max_payback_years": 5})
+    monkeypatch.setattr(service, "run_market_study", lambda *_: pytest.fail("should not run"))
+
+    monkeypatch.setattr(service, "study_path", lambda _identity: study)
+    saved = client.get(f"/api/runs/{RUN_ID}/market-study", params={"max_payback_years": 5})
+    monkeypatch.setattr(service, "study_path", lambda _identity: tmp_path / "studies" / "missing")
+    missing = client.get(f"/api/runs/{RUN_ID}/market-study")
+
+    assert saved.status_code == 200
+    assert saved.json()["newly_calculated"] is False
+    assert missing.status_code == 404
+    assert "hasn't been run" in missing.json()["detail"]
