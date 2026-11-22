@@ -2,3 +2,6 @@ dist
 coverage
 node_modules
 package-lock.json
+# Generated from the backend - see src/api/README.md
+openapi.json
+src/api/schema.d.ts

@@ -12,14 +12,25 @@ npm install   # once, and again after package.json changes
 npm run dev   # opens at http://localhost:5173 and reloads as you edit
 ```
 
+The pages get their data from the FastAPI backend, so start it first in a
+second terminal. From the `CADENCE` folder:
+
+```
+python -m uvicorn cadence.api.main:app --reload --app-dir src
+```
+
+`npm run dev` passes every `/api` request on to it. The backend's own page at
+http://127.0.0.1:8000/docs lists every call.
+
 ## Other commands
 
-| Command          | What it does                                                       |
-| ---------------- | ------------------------------------------------------------------ |
-| `npm test`       | Runs the tests once (`npm run test:watch` reruns them as you edit) |
-| `npm run lint`   | Flags common mistakes                                              |
-| `npm run format` | Formats every file with Prettier                                   |
-| `npm run build`  | Type-checks and builds the static site into `dist/`                |
+| Command             | What it does                                                       |
+| ------------------- | ------------------------------------------------------------------ |
+| `npm test`          | Runs the tests once (`npm run test:watch` reruns them as you edit) |
+| `npm run lint`      | Flags common mistakes                                              |
+| `npm run format`    | Formats every file with Prettier                                   |
+| `npm run build`     | Type-checks and builds the static site into `dist/`                |
+| `npm run api:types` | Regenerates the backend types (see `src/api/README.md`)            |
 
 ## Where things live
 
