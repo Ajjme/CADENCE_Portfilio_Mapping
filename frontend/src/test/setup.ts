@@ -2,7 +2,7 @@
 // page between tests, and fills in browser features Mantine needs that jsdom lacks.
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
-import { afterEach } from 'vitest'
+import { afterEach, vi } from 'vitest'
 
 afterEach(() => cleanup())
 
@@ -26,3 +26,9 @@ class ResizeObserver {
   disconnect() {}
 }
 window.ResizeObserver = ResizeObserver
+
+// Plotly draws with browser features jsdom doesn't have, so tests use a
+// stand-in that draws nothing. Tests check the numbers around the charts.
+vi.mock('plotly.js-basic-dist-min', () => ({
+  default: { react: vi.fn(), purge: vi.fn() },
+}))

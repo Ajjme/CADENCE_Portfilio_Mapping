@@ -16,6 +16,9 @@ const PAGES: { id: PageId; label: string }[] = [
 function App() {
   // Which page is showing. Changing it re-renders the app with the new page.
   const [page, setPage] = useState<PageId>('portfolio')
+  // The run the Results page shows, like the active run in Streamlit's
+  // session state. Kept here so it stays put when switching pages.
+  const [runId, setRunId] = useState<string | null>(null)
   // On small screens the sidebar folds into a menu button.
   const [sidebarOpen, { toggle: toggleSidebar }] = useDisclosure()
 
@@ -56,7 +59,9 @@ function App() {
 
       <AppShell.Main>
         {page === 'portfolio' && <PortfolioPage />}
-        {page === 'results' && <ResultsPage />}
+        {page === 'results' && (
+          <ResultsPage runId={runId} onRunChange={setRunId} />
+        )}
       </AppShell.Main>
     </AppShell>
   )

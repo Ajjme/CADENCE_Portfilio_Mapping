@@ -40,6 +40,7 @@ src/
   App.tsx       header, sidebar, and which page is showing
   theme.ts      colors and fonts
   pages/        one file per screen, matching the Streamlit pages
+    results/    the Results page's tabs, one file each
   components/   pieces used on more than one page
   api/          every call to the backend
   test/         test setup
