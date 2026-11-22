@@ -50,3 +50,19 @@ export function getCostAllocations(
 export function runExportUrl(runId: string) {
   return apiUrl(runPath(runId, '/export'))
 }
+
+// The Market Study already saved for this payback limit. Fails with a 404
+// ApiError when it hasn't been run with these settings yet.
+export function getMarketStudy(runId: string, maxPaybackYears?: number) {
+  return request<Schemas['MarketStudy']>(runPath(runId, '/market-study'), {
+    query: { max_payback_years: maxPaybackYears },
+  })
+}
+
+// Runs the Market Study for the whole portfolio. Leave out maxPaybackYears
+// for no payback limit. Resolves when it finishes.
+export function runMarketStudy(runId: string, maxPaybackYears?: number) {
+  return postJson<Schemas['MarketStudy']>(runPath(runId, '/market-study'), {
+    max_payback_years: maxPaybackYears ?? null,
+  })
+}

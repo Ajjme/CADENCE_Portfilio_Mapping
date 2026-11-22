@@ -25,6 +25,8 @@ from cadence.api import service
 from cadence.api.schemas import (
     CostAllocations,
     Health,
+    MarketStudy,
+    MarketStudyRequest,
     Portfolio,
     RunInfo,
     RunRequest,
@@ -164,3 +166,20 @@ def export_run(run_id: str) -> Response:
         media_type=XLSX_MIME,
         headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
     )
+
+
+@app.get("/api/runs/{run_id}/market-study", response_model=MarketStudy)
+def saved_market_study(
+    run_id: str,
+    max_payback_years: Annotated[
+        Optional[int], Query(ge=1, description="The payback limit the study was run with. Leave out for none.")
+    ] = None,
+) -> MarketStudy:
+    """The Market Study already saved for these settings. 404 if it hasn't been run yet."""
+    return service.market_study(run_id, max_payback_years, calculate=False)
+
+
+@app.post("/api/runs/{run_id}/market-study", response_model=MarketStudy)
+def run_market_study(run_id: str, request: MarketStudyRequest) -> MarketStudy:
+    """Run the experimental Market Study for the whole portfolio. Waits until it finishes."""
+    return service.market_study(run_id, request.max_payback_years, calculate=True)

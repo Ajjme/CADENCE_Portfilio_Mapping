@@ -78,11 +78,14 @@ Then open **http://127.0.0.1:8000/docs** to see every endpoint and try them in t
 | `GET /api/runs/{run_id}/series` | One yearly metric for each replacement option, for one asset or the portfolio |
 | `GET /api/runs/{run_id}/cost-allocations` | One year's costs split into material, labor, repair, and the rest |
 | `GET /api/runs/{run_id}/export` | The run as one Excel file |
+| `GET /api/runs/{run_id}/market-study` | The Market Study already saved for a payback limit, or 404 if it hasn't been run |
+| `POST /api/runs/{run_id}/market-study` | Runs the experimental Market Study for the whole portfolio. Waits until it finishes |
 
 - One analysis runs at a time, and a second request waits for the first.
 - Runs aren't meant to be kept. They're written to `cadence_datalake` like the Streamlit app's, and most hosts wipe that folder on restart.
 - Browsers can call the API from the Vite dev server (`http://localhost:5173`). To allow other addresses, like the deployed frontend, set `CADENCE_API_ORIGINS` to a comma-separated list of every address to allow.
-- Not in the API yet: the Market Study, wind return periods, fragility curves, and map geography.
+- The Market Study needs the asset files a run saves when it starts, so it only works for runs started through the API (`POST /api/runs`). The backend keeps their paths in `cadence_datalake/api/run_inputs`.
+- Not in the API yet: wind return periods, fragility curves, and map geography.
 
 ## System Layout
 

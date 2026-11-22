@@ -218,6 +218,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/market-study": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Saved Market Study
+         * @description The Market Study already saved for these settings. 404 if it hasn't been run yet.
+         */
+        get: operations["saved_market_study_api_runs__run_id__market_study_get"];
+        put?: never;
+        /**
+         * Run Market Study
+         * @description Run the experimental Market Study for the whole portfolio. Waits until it finishes.
+         */
+        post: operations["run_market_study_api_runs__run_id__market_study_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -327,6 +351,97 @@ export interface components {
             status?: "ok";
         };
         /**
+         * MarketStudy
+         * @description An experimental study of which roofs a homeowner would replace each year, and when.
+         */
+        MarketStudy: {
+            /**
+             * Run Id
+             * @description The Alternative Analysis run the study is based on
+             */
+            run_id: string;
+            /** Study Id */
+            study_id: string;
+            /** Max Payback Years */
+            max_payback_years?: number | null;
+            /**
+             * Newly Calculated
+             * @description False when an earlier study with the same settings was reused
+             */
+            newly_calculated: boolean;
+            /** Asset Count */
+            asset_count: number;
+            /**
+             * Last Verified Year
+             * @description The run's last year. Later years hold prices and climate constant
+             */
+            last_verified_year: number;
+            /** Evaluation End Year */
+            evaluation_end_year: number;
+            /** Real Discount Rate */
+            real_discount_rate: number;
+            /** Enabled Cost Streams */
+            enabled_cost_streams: string[];
+            /** Tile Uses Metal Proxy */
+            tile_uses_metal_proxy: boolean;
+            /** Policy Id */
+            policy_id: string;
+            /**
+             * Cost Labels
+             * @description Cost columns and their labels, in chart order
+             */
+            cost_labels: {
+                [key: string]: string;
+            };
+            /** Roof Share */
+            roof_share: components["schemas"]["RoofShare"][];
+            /** Costs */
+            costs: components["schemas"]["MarketYear"][];
+        };
+        /** MarketStudyRequest */
+        MarketStudyRequest: {
+            /**
+             * Max Payback Years
+             * @description Longest payback a homeowner accepts for a voluntary replacement. Leave out for no limit.
+             */
+            max_payback_years?: number | null;
+        };
+        /**
+         * MarketYear
+         * @description The portfolio's expected costs in one year, and how many roofs were replaced and why.
+         */
+        MarketYear: {
+            /** Year */
+            year: number;
+            /** Repair Usd */
+            repair_usd?: number | null;
+            /** Loss Of Use Usd */
+            loss_of_use_usd?: number | null;
+            /** Material Usd */
+            material_usd?: number | null;
+            /** Labor Usd */
+            labor_usd?: number | null;
+            /** Disposal Usd */
+            disposal_usd?: number | null;
+            /** Carbon Usd */
+            carbon_usd?: number | null;
+            /**
+             * Total Usd
+             * @description Null when an asset's costs are incomplete
+             */
+            total_usd?: number | null;
+            /** Replacement Count */
+            replacement_count: number;
+            /** Eul Replacements */
+            eul_replacements: number;
+            /** Damage Replacements */
+            damage_replacements: number;
+            /** Economic Replacements */
+            economic_replacements: number;
+            /** Unknown Count */
+            unknown_count: number;
+        };
+        /**
          * Portfolio
          * @description A validated asset workbook.
          */
@@ -376,6 +491,23 @@ export interface components {
             /** Event Cost Incomplete */
             event_cost_incomplete: boolean;
         };
+        /**
+         * RoofShare
+         * @description How many roofs of one material the portfolio has in one year, after that year's replacements.
+         */
+        RoofShare: {
+            /** Year */
+            year: number;
+            /**
+             * Material Id
+             * @description OFFICIAL_ASPHALT, OFFICIAL_METAL, OFFICIAL_TILE, or UNKNOWN
+             */
+            material_id: string;
+            /** Asset Count */
+            asset_count: number;
+            /** Share Percent */
+            share_percent: number;
+        };
         /** RunInfo */
         RunInfo: {
             /** Run Id */
@@ -400,6 +532,12 @@ export interface components {
             enabled_cost_streams: string[];
             /** Dollar Basis */
             dollar_basis?: string | null;
+            /**
+             * Market Study Ready
+             * @description True when the backend has the asset inputs the Market Study needs for this run
+             * @default false
+             */
+            market_study_ready?: boolean;
         };
         /** RunRequest */
         RunRequest: {
@@ -839,6 +977,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    saved_market_study_api_runs__run_id__market_study_get: {
+        parameters: {
+            query?: {
+                /** @description The payback limit the study was run with. Leave out for none. */
+                max_payback_years?: number | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketStudy"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_market_study_api_runs__run_id__market_study_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketStudyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketStudy"];
                 };
             };
             /** @description Validation Error */

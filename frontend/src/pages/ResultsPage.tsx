@@ -16,6 +16,7 @@ import { useState } from 'react'
 import { getRun, getRunSummary, runExportUrl } from '../api/runs'
 import PageHeader from '../components/PageHeader'
 import CostAllocationsTab from './results/CostAllocationsTab'
+import MarketStudyTab from './results/MarketStudyTab'
 import NoRunPanel from './results/NoRunPanel'
 import OverviewTab from './results/OverviewTab'
 import RunInfoTab from './results/RunInfoTab'
@@ -124,6 +125,7 @@ function RunResults({
           <Tabs.Tab value="overview">Overview</Tabs.Tab>
           <Tabs.Tab value="time-series">Time series</Tabs.Tab>
           <Tabs.Tab value="cost-allocations">Cost allocations</Tabs.Tab>
+          <Tabs.Tab value="market-study">Market study</Tabs.Tab>
           <Tabs.Tab value="run">Run information</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="overview" pt="md">
@@ -139,6 +141,9 @@ function RunResults({
             startYear={run.data.start_year}
             endYear={run.data.end_year}
           />
+        </Tabs.Panel>
+        <Tabs.Panel value="market-study" pt="md">
+          <MarketStudyTab run={run.data} assetId={assetId} />
         </Tabs.Panel>
         <Tabs.Panel value="run" pt="md">
           <RunInfoTab run={run.data} />
