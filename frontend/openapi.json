@@ -1,0 +1,1334 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CADENCE API",
+    "description": "Runs CADENCE roof Alternative Analyses and serves their results to the frontend.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "summary": "Settings",
+        "description": "Default run settings and the allowed values, for the settings form.",
+        "operationId": "settings_api_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsChoices"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portfolio/example": {
+      "get": {
+        "summary": "Example Workbook",
+        "description": "Download the example asset workbook, to use as a template.",
+        "operationId": "example_workbook_api_portfolio_example_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portfolio/default": {
+      "get": {
+        "summary": "Default Portfolio",
+        "description": "The example workbook's assets, shown before anyone uploads their own.",
+        "operationId": "default_portfolio_api_portfolio_default_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Portfolio"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portfolio": {
+      "post": {
+        "summary": "Upload Portfolio",
+        "description": "Upload and check an asset workbook. Use the returned workbook_id to run it.",
+        "operationId": "upload_portfolio_api_portfolio_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_portfolio_api_portfolio_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Portfolio"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs": {
+      "post": {
+        "summary": "Run Analysis",
+        "description": "Run the Alternative Analysis. This waits until the run finishes, which can take a few minutes.",
+        "operationId": "run_analysis_api_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}": {
+      "get": {
+        "summary": "Run",
+        "operationId": "run_api_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/summary": {
+      "get": {
+        "summary": "Run Summary",
+        "description": "Final NPV and the other results, by asset and replacement option, plus portfolio totals.",
+        "operationId": "run_summary_api_runs__run_id__summary_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/series": {
+      "get": {
+        "summary": "Run Series",
+        "description": "One yearly result for each replacement option, for the time series chart.",
+        "operationId": "run_series_api_runs__run_id__series_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "asset_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One asset. Leave out for the whole portfolio.",
+              "title": "Asset Id"
+            },
+            "description": "One asset. Leave out for the whole portfolio."
+          },
+          {
+            "name": "metric",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "A key from GET /api/settings metrics",
+              "default": "net_present_value_usd",
+              "title": "Metric"
+            },
+            "description": "A key from GET /api/settings metrics"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Series"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/cost-allocations": {
+      "get": {
+        "summary": "Run Cost Allocations",
+        "description": "One year's costs for each replacement option, for the cost allocation chart.",
+        "operationId": "run_cost_allocations_api_runs__run_id__cost_allocations_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Year"
+            }
+          },
+          {
+            "name": "asset_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One asset. Leave out for the whole portfolio.",
+              "title": "Asset Id"
+            },
+            "description": "One asset. Leave out for the whole portfolio."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CostAllocations"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/export": {
+      "get": {
+        "summary": "Export Run",
+        "description": "Download the whole run as one Excel file.",
+        "operationId": "export_run_api_runs__run_id__export_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AssetScenario": {
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "title": "Asset Id"
+          },
+          "scenario_id": {
+            "type": "string",
+            "title": "Scenario Id"
+          },
+          "scenario_material_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Material Id"
+          },
+          "through_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Through Year"
+          },
+          "cumulative_avoided_damage_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Avoided Damage Usd"
+          },
+          "cumulative_discounted_avoided_damage_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Discounted Avoided Damage Usd"
+          },
+          "cumulative_net_benefit_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Net Benefit Usd"
+          },
+          "net_present_value_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Present Value Usd"
+          },
+          "burnout_replacement_count": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Burnout Replacement Count"
+          },
+          "active_cost_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Cost Source"
+          },
+          "active_cost_fallback_applied": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Cost Fallback Applied"
+          },
+          "repair_cost_incomplete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Cost Incomplete"
+          },
+          "climate_risk_total_incomplete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Climate Risk Total Incomplete"
+          },
+          "event_cost_incomplete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Cost Incomplete"
+          }
+        },
+        "type": "object",
+        "required": [
+          "asset_id",
+          "scenario_id"
+        ],
+        "title": "AssetScenario",
+        "description": "Final results for one asset and replacement option."
+      },
+      "Body_upload_portfolio_api_portfolio_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "CADENCE asset workbook (.xlsx)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_portfolio_api_portfolio_post"
+      },
+      "CostAllocation": {
+        "properties": {
+          "scenario_id": {
+            "type": "string",
+            "title": "Scenario Id"
+          },
+          "material_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Usd"
+          },
+          "labor_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labor Usd"
+          },
+          "repair_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Usd"
+          },
+          "loss_of_use_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loss Of Use Usd"
+          },
+          "disposal_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disposal Usd"
+          },
+          "carbon_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carbon Usd"
+          },
+          "total_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Usd"
+          },
+          "allocation_estimated": {
+            "type": "boolean",
+            "title": "Allocation Estimated",
+            "description": "True when the material and labor split uses default shares"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scenario_id",
+          "allocation_estimated"
+        ],
+        "title": "CostAllocation",
+        "description": "One replacement option's costs in one year, split into parts. A part is null when it can't be split."
+      },
+      "CostAllocations": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id",
+            "description": "Null for the whole portfolio"
+          },
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Labels",
+            "description": "Cost columns and their labels, in chart order"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/CostAllocation"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "asset_id",
+          "year",
+          "labels",
+          "rows"
+        ],
+        "title": "CostAllocations"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status",
+            "default": "ok"
+          }
+        },
+        "type": "object",
+        "title": "Health"
+      },
+      "Portfolio": {
+        "properties": {
+          "workbook_id": {
+            "type": "string",
+            "title": "Workbook Id",
+            "description": "\"default\" for the example workbook, otherwise the uploaded file's ID"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "asset_count": {
+            "type": "integer",
+            "title": "Asset Count"
+          },
+          "assets": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Assets",
+            "description": "One row per asset, with the workbook's columns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workbook_id",
+          "file_name",
+          "asset_count",
+          "assets"
+        ],
+        "title": "Portfolio",
+        "description": "A validated asset workbook."
+      },
+      "PortfolioScenario": {
+        "properties": {
+          "scenario_id": {
+            "type": "string",
+            "title": "Scenario Id"
+          },
+          "asset_count": {
+            "type": "integer",
+            "title": "Asset Count"
+          },
+          "burnout_replacement_count": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Burnout Replacement Count"
+          },
+          "cumulative_avoided_damage_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Avoided Damage Usd"
+          },
+          "cumulative_discounted_avoided_damage_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Discounted Avoided Damage Usd"
+          },
+          "cumulative_net_benefit_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Net Benefit Usd"
+          },
+          "net_present_value_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Present Value Usd"
+          },
+          "active_cost_fallback_applied": {
+            "type": "boolean",
+            "title": "Active Cost Fallback Applied"
+          },
+          "repair_cost_incomplete": {
+            "type": "boolean",
+            "title": "Repair Cost Incomplete"
+          },
+          "climate_risk_total_incomplete": {
+            "type": "boolean",
+            "title": "Climate Risk Total Incomplete"
+          },
+          "event_cost_incomplete": {
+            "type": "boolean",
+            "title": "Event Cost Incomplete"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scenario_id",
+          "asset_count",
+          "active_cost_fallback_applied",
+          "repair_cost_incomplete",
+          "climate_risk_total_incomplete",
+          "event_cost_incomplete"
+        ],
+        "title": "PortfolioScenario",
+        "description": "Totals across all assets for one replacement option. A total is null when any asset is missing a value."
+      },
+      "RunInfo": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "run_timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Timestamp"
+          },
+          "asset_count": {
+            "type": "integer",
+            "title": "Asset Count"
+          },
+          "start_year": {
+            "type": "integer",
+            "title": "Start Year"
+          },
+          "end_year": {
+            "type": "integer",
+            "title": "End Year"
+          },
+          "real_discount_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Discount Rate"
+          },
+          "scghg_discount_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scghg Discount Rate"
+          },
+          "demand_surge": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Demand Surge"
+          },
+          "enabled_cost_streams": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Enabled Cost Streams"
+          },
+          "dollar_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dollar Basis"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "schema_version",
+          "asset_count",
+          "start_year",
+          "end_year",
+          "enabled_cost_streams"
+        ],
+        "title": "RunInfo"
+      },
+      "RunRequest": {
+        "properties": {
+          "workbook_id": {
+            "type": "string",
+            "title": "Workbook Id",
+            "description": "From POST /api/portfolio, or \"default\"",
+            "default": "default"
+          },
+          "asset_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Ids",
+            "description": "Run only these assets. Leave out to run all of them."
+          },
+          "settings": {
+            "$ref": "#/components/schemas/RunSettings"
+          }
+        },
+        "type": "object",
+        "title": "RunRequest"
+      },
+      "RunSettings": {
+        "properties": {
+          "start_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Year"
+          },
+          "end_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Year"
+          },
+          "real_discount_rate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Discount Rate"
+          },
+          "scghg_discount_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scghg Discount Rate"
+          },
+          "demand_surge": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Demand Surge"
+          },
+          "cost_streams": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "disposal",
+                    "carbon"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Streams",
+            "description": "Optional cost streams to turn on. Material and labor are always on."
+          }
+        },
+        "type": "object",
+        "title": "RunSettings",
+        "description": "Settings for one run. Anything left out uses the default."
+      },
+      "RunSummary": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "portfolio": {
+            "items": {
+              "$ref": "#/components/schemas/PortfolioScenario"
+            },
+            "type": "array",
+            "title": "Portfolio"
+          },
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/AssetScenario"
+            },
+            "type": "array",
+            "title": "Assets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "portfolio",
+          "assets"
+        ],
+        "title": "RunSummary"
+      },
+      "Series": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id",
+            "description": "Null for the whole portfolio"
+          },
+          "metric": {
+            "type": "string",
+            "title": "Metric"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "asset_id",
+          "metric",
+          "label",
+          "points"
+        ],
+        "title": "Series"
+      },
+      "SeriesPoint": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "scenario_id": {
+            "type": "string",
+            "title": "Scenario Id"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value",
+            "description": "Null when an asset is missing a value that year"
+          },
+          "installation_events": {
+            "type": "integer",
+            "title": "Installation Events"
+          },
+          "replacement_events": {
+            "type": "integer",
+            "title": "Replacement Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "scenario_id",
+          "value",
+          "installation_events",
+          "replacement_events"
+        ],
+        "title": "SeriesPoint"
+      },
+      "SettingsChoices": {
+        "properties": {
+          "start_year": {
+            "type": "integer",
+            "title": "Start Year"
+          },
+          "end_year": {
+            "type": "integer",
+            "title": "End Year"
+          },
+          "real_discount_rate": {
+            "type": "number",
+            "title": "Real Discount Rate",
+            "description": "Annual real discount rate, as a fraction (0.02 = 2%)"
+          },
+          "scghg_discount_rate": {
+            "type": "number",
+            "title": "Scghg Discount Rate",
+            "description": "Social cost of carbon rate, in percent"
+          },
+          "demand_surge": {
+            "type": "boolean",
+            "title": "Demand Surge"
+          },
+          "cost_streams": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "disposal",
+                "carbon"
+              ]
+            },
+            "type": "array",
+            "title": "Cost Streams",
+            "description": "Optional cost streams that are on by default"
+          },
+          "first_year": {
+            "type": "integer",
+            "title": "First Year"
+          },
+          "last_year": {
+            "type": "integer",
+            "title": "Last Year"
+          },
+          "scghg_discount_rate_options": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Scghg Discount Rate Options"
+          },
+          "optional_cost_streams": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "disposal",
+                "carbon"
+              ]
+            },
+            "type": "array",
+            "title": "Optional Cost Streams"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Metrics",
+            "description": "Yearly result columns and their labels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_year",
+          "end_year",
+          "real_discount_rate",
+          "scghg_discount_rate",
+          "demand_surge",
+          "cost_streams",
+          "first_year",
+          "last_year",
+          "scghg_discount_rate_options",
+          "optional_cost_streams",
+          "metrics"
+        ],
+        "title": "SettingsChoices",
+        "description": "Default run settings, plus the values each one is allowed to take."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

@@ -266,4 +266,3 @@ def run_workbook(run_id: str) -> tuple[bytes, str]:
 def records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     """Rows as plain JSON values. Missing numbers become null and dates become ISO text."""
     return json.loads(frame.to_json(orient="records", date_format="iso") or "[]")
-

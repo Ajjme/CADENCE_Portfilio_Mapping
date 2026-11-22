@@ -253,3 +253,14 @@ def test_run_rejects_bad_settings_and_unknown_workbooks(client: TestClient) -> N
 
     assert bad_rate.status_code == 400
     assert missing.status_code == 404
+
+
+def test_the_frontend_schema_matches_the_api() -> None:
+    from cadence.api import write_openapi
+
+    fix = "the API changed - run `python -m cadence.api.write_openapi`, then `npm run api:types` in frontend/"
+    assert write_openapi.SCHEMA_PATH.is_file(), fix
+    saved = json.loads(write_openapi.SCHEMA_PATH.read_text(encoding="utf-8"))
+    current = json.loads(write_openapi.schema_text())
+    assert saved["paths"] == current["paths"], fix
+    assert saved["components"] == current["components"], fix
