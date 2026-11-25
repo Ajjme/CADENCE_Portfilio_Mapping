@@ -1,3 +1,4 @@
+import io
 import json
 import shutil
 import zipfile
@@ -442,3 +443,56 @@ def test_fragility_identity_comes_from_the_precomputed_file_once_it_exists(tmp_p
     assert len(first) == len(raw_identity) == 64
     assert first != raw_identity
     assert changed != first
+
+
+def _download_manifest(root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "manifest.json").write_text(json.dumps({"outputs": {
+        "wind": {"file": "wind.parquet", "bytes": 4},
+        "zip_boundaries": {"lookup_file": "lookup.parquet", "lookup_bytes": 6,
+                           "map_file": "map.parquet", "map_bytes": 3},
+    }}), encoding="utf-8")
+
+
+def test_downloads_only_the_files_this_checkout_is_missing(tmp_path: Path) -> None:
+    from cadence.reference_data.precomputed import download_precomputed_files
+
+    root = tmp_path / "Precomputed"
+    _download_manifest(root)
+    (root / "wind.parquet").write_bytes(b"WIND")
+    (root / "lookup.parquet").write_bytes(b"version https://git-lfs.github.com/spec/v1\n")
+    served = {"lookup.parquet": b"LOOKUP", "map.parquet": b"MAP"}
+    asked = []
+
+    def open_url(url, timeout):
+        asked.append(url)
+        return io.BytesIO(served[url.rsplit("/", 1)[1]])
+
+    downloaded = download_precomputed_files(tmp_path, "https://example.r2.dev/precomputed/v1/", open_url)
+
+    assert sorted(downloaded) == ["lookup.parquet", "map.parquet"]
+    assert asked[0].startswith("https://example.r2.dev/precomputed/v1/")
+    assert (root / "lookup.parquet").read_bytes() == b"LOOKUP"
+    assert (root / "wind.parquet").read_bytes() == b"WIND"
+
+
+def test_a_download_with_the_wrong_size_is_not_kept(tmp_path: Path) -> None:
+    from cadence.reference_data.precomputed import download_precomputed_files
+
+    root = tmp_path / "Precomputed"
+    _download_manifest(root)
+    (root / "wind.parquet").write_bytes(b"WIND")
+    (root / "lookup.parquet").write_bytes(b"LOOKUP")
+
+    with pytest.raises(RuntimeError, match="manifest.json says 3"):
+        download_precomputed_files(tmp_path, "https://example.r2.dev", lambda url, timeout: io.BytesIO(b"TOO LONG"))
+
+    assert not (root / "map.parquet").exists()
+    assert not (root / "map.parquet.part").exists()
+
+
+def test_nothing_downloads_without_a_data_url(tmp_path: Path, monkeypatch) -> None:
+    from cadence.reference_data.precomputed import download_precomputed_files
+
+    monkeypatch.delenv("CADENCE_DATA_URL", raising=False)
+    assert download_precomputed_files(tmp_path, open_url=lambda *_: pytest.fail("should not download")) == []

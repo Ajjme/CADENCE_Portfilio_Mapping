@@ -12,6 +12,27 @@ Streamlit boot. `manifest.json` records what each file was built from.
 | `zcta_boundaries_map.parquet` | TIGER 2020 ZCTA shapefile, simplified like the map always was | The ZIP / ZCTA results map |
 | `fragility_curves.parquet` | `Data/Fragility_Curves/iecc2021` (1,440 files) | Every terrain-averaged fragility curve |
 
+## Copies on Cloudflare R2
+
+The same files are in the `cadence-data` R2 bucket, under `precomputed/v1/`:
+https://pub-70415b32649b4091baaff3a091a87a07.r2.dev/precomputed/v1
+
+When the `CADENCE_DATA_URL` setting is that address, the Streamlit app and the
+FastAPI backend download any of these files a checkout is missing (or has only
+as a Git LFS pointer) when they start, and check each one's size against
+`manifest.json`. On Streamlit Community Cloud, add it under the app's
+Settings → Secrets:
+
+```
+CADENCE_DATA_URL = "https://pub-70415b32649b4091baaff3a091a87a07.r2.dev/precomputed/v1"
+```
+
+Without the setting nothing is downloaded, and the files come from Git LFS as before.
+
+After rebuilding these files, upload all of them and the new `manifest.json` to a
+new folder (`precomputed/v2/`), then change the setting to it. A running app never
+reads a half-replaced set that way.
+
 ## Where the raw files are
 
 The raw files are no longer on `main`. Every Streamlit boot used to download all

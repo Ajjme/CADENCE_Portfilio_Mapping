@@ -35,7 +35,11 @@ from cadence.api.schemas import (
     SettingsChoices,
 )
 from cadence.economics.run_export import XLSX_MIME
-from cadence.ui.paths import DEFAULT_WORKBOOK
+from cadence.reference_data.precomputed import download_precomputed_files
+from cadence.ui.paths import DATA_ROOT, DEFAULT_WORKBOOK
+
+# Fetch any precomputed file this server is missing from R2 before taking requests.
+download_precomputed_files(DATA_ROOT)
 
 app = FastAPI(
     title="CADENCE API",
