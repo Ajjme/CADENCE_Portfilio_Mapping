@@ -12,26 +12,32 @@ Streamlit boot. `manifest.json` records what each file was built from.
 | `zcta_boundaries_map.parquet` | TIGER 2020 ZCTA shapefile, simplified like the map always was | The ZIP / ZCTA results map |
 | `fragility_curves.parquet` | `Data/Fragility_Curves/iecc2021` (1,440 files) | Every terrain-averaged fragility curve |
 
-## Copies on Cloudflare R2
+## Where the files are
 
-The same files are in the `cadence-data` R2 bucket, under `precomputed/v1/`:
+Only `manifest.json` and this README are in git. The `.parquet` files are in the
+`cadence-data` Cloudflare R2 bucket, under `precomputed/v1/`:
 https://pub-70415b32649b4091baaff3a091a87a07.r2.dev/precomputed/v1
 
-When the `CADENCE_DATA_URL` setting is that address, the Streamlit app and the
-FastAPI backend download any of these files a checkout is missing (or has only
-as a Git LFS pointer) when they start, and check each one's size against
-`manifest.json`. On Streamlit Community Cloud, add it under the app's
-Settings → Secrets:
+The Streamlit app and the FastAPI backend download any file that's missing here
+when they start, and check each one's size against `manifest.json`. They need
+the `CADENCE_DATA_URL` setting set to that address:
 
-```
-CADENCE_DATA_URL = "https://pub-70415b32649b4091baaff3a091a87a07.r2.dev/precomputed/v1"
-```
+- Streamlit Community Cloud: the app's Settings → Secrets
 
-Without the setting nothing is downloaded, and the files come from Git LFS as before.
+  ```
+  CADENCE_DATA_URL = "https://pub-70415b32649b4091baaff3a091a87a07.r2.dev/precomputed/v1"
+  ```
 
-After rebuilding these files, upload all of them and the new `manifest.json` to a
-new folder (`precomputed/v2/`), then change the setting to it. A running app never
-reads a half-replaced set that way.
+- Your own computer, once for the conda environment:
+
+  ```
+  conda env config vars set CADENCE_DATA_URL=https://pub-70415b32649b4091baaff3a091a87a07.r2.dev/precomputed/v1
+  ```
+
+  then `conda deactivate` and `conda activate cadence-ui` again.
+
+`.gitignore` keeps the downloaded files out of commits. Without the setting the
+app falls back to the raw files, which aren't on `main` (below).
 
 ## Where the raw files are
 
@@ -60,6 +66,10 @@ Do this when a raw input changes, like when new wind results replace
 
    Add `--only wind` (or `zip_lookup`, `zip_boundaries`, `fragility`) to rebuild one file.
 
-3. Commit the updated files in this folder.
+3. Upload the new `.parquet` files and `manifest.json` to a new folder in the
+   bucket (`precomputed/v2/`), then change `CADENCE_DATA_URL` to it everywhere.
+   A running app never reads a half-replaced set that way.
+
+4. Commit the new `manifest.json`.
 
 A new raw file also needs a new tag (`raw-data-v2`) so the next rebuild can find it.
